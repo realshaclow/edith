@@ -12,7 +12,9 @@ import {
   useTheme,
   useMediaQuery,
   Fade,
-  Slide
+  Slide,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
   Security,
@@ -25,6 +27,7 @@ import {
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import ForgotPasswordForm from './components/ForgotPasswordForm';
+import { useAnalytics } from '../../hooks/useAnalytics';
 
 type AuthMode = 'login' | 'register' | 'forgot-password';
 
@@ -32,6 +35,7 @@ const Auth: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('login');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { systemStats, isLoading: statsLoading, error: statsError } = useAnalytics();
 
   const features = [
     {
@@ -56,11 +60,24 @@ const Auth: React.FC = () => {
     }
   ];
 
+  // Użyj prawdziwych danych lub fallback
   const statistics = [
-    { label: 'Aktywnych użytkowników', value: '1,200+' },
-    { label: 'Protokołów badawczych', value: '850+' },
-    { label: 'Przeprowadzonych badań', value: '5,400+' },
-    { label: 'Uptime systemu', value: '99.9%' }
+    { 
+      label: 'Aktywnych użytkowników', 
+      value: statsLoading ? '...' : (systemStats ? `${systemStats.activeUsers}+` : '0+')
+    },
+    { 
+      label: 'Protokołów badawczych', 
+      value: statsLoading ? '...' : (systemStats ? `${systemStats.totalProtocols}+` : '0+')
+    },
+    { 
+      label: 'Przeprowadzonych badań', 
+      value: statsLoading ? '...' : (systemStats ? `${systemStats.totalStudies}+` : '0+')
+    },
+    { 
+      label: 'Uptime systemu', 
+      value: statsLoading ? '...' : (systemStats ? `${systemStats.systemUptime}h` : '24/7')
+    }
   ];
 
   const renderAuthForm = () => {
@@ -182,12 +199,21 @@ const Auth: React.FC = () => {
                     <Typography variant="h6" fontWeight="bold" gutterBottom>
                       Zaufali nam:
                     </Typography>
+                    {statsError && (
+                      <Alert severity="warning" sx={{ mb: 2 }}>
+                        Nie można pobrać aktualnych statystyk. Wyświetlane są dane przykładowe.
+                      </Alert>
+                    )}
                     <Grid container spacing={3}>
                       {statistics.map((stat, index) => (
                         <Grid item xs={6} key={index}>
                           <Box textAlign="center">
                             <Typography variant="h4" fontWeight="bold" color="primary.main">
-                              {stat.value}
+                              {statsLoading ? (
+                                <CircularProgress size={24} />
+                              ) : (
+                                stat.value
+                              )}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               {stat.label}

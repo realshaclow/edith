@@ -23,12 +23,13 @@ import {
   Email,
   Lock,
   Google,
-  Microsoft,
   GitHub
 } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../hooks/useAuth';
 import { LoginCredentials, FormErrors } from '../types';
+import OAuthButtonGroup from './OAuthButtonGroup';
+import { MicrosoftIcon } from './icons';
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -111,11 +112,6 @@ const LoginForm: React.FC<LoginFormProps> = ({
     }
   };
 
-  const handleOAuthLogin = (provider: string) => {
-    console.log(`OAuth login with ${provider}`);
-    // Implement OAuth login logic here
-  };
-
   return (
     <Card sx={{ maxWidth: 400, width: '100%', mx: 'auto' }}>
       <CardContent sx={{ p: 4 }}>
@@ -137,35 +133,16 @@ const LoginForm: React.FC<LoginFormProps> = ({
         )}
 
         {/* OAuth Buttons */}
-        <Stack spacing={2} mb={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<Google />}
-            onClick={() => handleOAuthLogin('google')}
-            sx={{ py: 1.5 }}
-          >
-            Kontynuuj z Google
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<Microsoft />}
-            onClick={() => handleOAuthLogin('microsoft')}
-            sx={{ py: 1.5 }}
-          >
-            Kontynuuj z Microsoft
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GitHub />}
-            onClick={() => handleOAuthLogin('github')}
-            sx={{ py: 1.5 }}
-          >
-            Kontynuuj z GitHub
-          </Button>
-        </Stack>
+        <OAuthButtonGroup 
+          mode="login"
+          disabled={isSubmitting}
+          onSuccess={() => {
+            if (onSuccess) onSuccess();
+          }}
+          onError={(error) => {
+            setApiError(`${error.provider}: ${error.error}`);
+          }}
+        />
 
         <Divider sx={{ my: 3 }}>
           <Typography variant="body2" color="text.secondary">
@@ -301,13 +278,22 @@ const LoginForm: React.FC<LoginFormProps> = ({
           }}
         >
           <Typography variant="caption" display="block" fontWeight="bold" gutterBottom>
-            Demo Account:
+            Demo Accounts:
+          </Typography>
+          <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+            <strong>Administrator:</strong><br/>
+            Email: admin@edith.pl<br/>
+            Password: Admin123!@#
+          </Typography>
+          <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+            <strong>Researcher:</strong><br/>
+            Email: researcher@edith.pl<br/>
+            Password: Research123!
           </Typography>
           <Typography variant="caption" display="block">
-            Email: admin@edith.com
-          </Typography>
-          <Typography variant="caption" display="block">
-            Password: admin123
+            <strong>Operator:</strong><br/>
+            Email: operator@edith.pl<br/>
+            Password: Operator123!
           </Typography>
         </Paper>
       </CardContent>

@@ -1,10 +1,148 @@
 import { PrismaClient } from '@prisma/client';
 import { ResearchProtocols } from '../src/data/research-protocols';
+import { hashPassword } from '../src/auth/utils/password';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🌱 Starting database seeding...');
+async function seedAdminUser() {
+  console.log('👤 Creating admin user...');
+
+  // Sprawdź czy admin już istnieje
+  const existingAdmin = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: 'admin@edith.pl' },
+        { role: 'SUPER_ADMIN' }
+      ]
+    }
+  });
+
+  if (existingAdmin) {
+    console.log('⏭️ Admin user already exists');
+    return existingAdmin;
+  }
+
+  // Stwórz hasło administratora
+  const adminPassword = 'Admin123!@#';
+  const hashedPassword = await hashPassword(adminPassword);
+
+  // Utwórz administratora
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@edith.pl',
+      username: 'admin',
+      passwordHash: hashedPassword,
+      firstName: 'Administrator',
+      lastName: 'Systemu',
+      title: 'Administrator',
+      affiliation: 'EDITH Research Platform',
+      department: 'IT',
+      position: 'System Administrator',
+      role: 'SUPER_ADMIN',
+      isActive: true,
+      isVerified: true,
+      language: 'pl',
+      timezone: 'Europe/Warsaw'
+    }
+  });
+
+  console.log('✅ Admin user created successfully');
+  console.log('📧 Email: admin@edith.pl');
+  console.log('🔑 Password: Admin123!@#');
+  console.log('⚠️ REMEMBER TO CHANGE THE PASSWORD AFTER FIRST LOGIN!');
+
+  return admin;
+}
+
+async function seedResearcher() {
+  console.log('🔬 Creating researcher user...');
+
+  // Sprawdź czy researcher już istnieje
+  const existingResearcher = await prisma.user.findFirst({
+    where: { email: 'researcher@edith.pl' }
+  });
+
+  if (existingResearcher) {
+    console.log('⏭️ Researcher user already exists');
+    return existingResearcher;
+  }
+
+  // Stwórz hasło badacza
+  const researcherPassword = 'Research123!';
+  const hashedPassword = await hashPassword(researcherPassword);
+
+  // Utwórz badacza
+  const researcher = await prisma.user.create({
+    data: {
+      email: 'researcher@edith.pl',
+      username: 'researcher',
+      passwordHash: hashedPassword,
+      firstName: 'Jan',
+      lastName: 'Kowalski',
+      title: 'Dr',
+      affiliation: 'Uniwersytet Badawczy',
+      department: 'Wydział Nauk Technicznych',
+      position: 'Adiunkt',
+      role: 'RESEARCHER',
+      isActive: true,
+      isVerified: true,
+      language: 'pl',
+      timezone: 'Europe/Warsaw'
+    }
+  });
+
+  console.log('✅ Researcher user created successfully');
+  console.log('📧 Email: researcher@edith.pl');
+  console.log('� Password: Research123!');
+
+  return researcher;
+}
+
+async function seedOperator() {
+  console.log('⚙️ Creating operator user...');
+
+  // Sprawdź czy operator już istnieje
+  const existingOperator = await prisma.user.findFirst({
+    where: { email: 'operator@edith.pl' }
+  });
+
+  if (existingOperator) {
+    console.log('⏭️ Operator user already exists');
+    return existingOperator;
+  }
+
+  // Stwórz hasło operatora
+  const operatorPassword = 'Operator123!';
+  const hashedPassword = await hashPassword(operatorPassword);
+
+  // Utwórz operatora
+  const operator = await prisma.user.create({
+    data: {
+      email: 'operator@edith.pl',
+      username: 'operator',
+      passwordHash: hashedPassword,
+      firstName: 'Anna',
+      lastName: 'Nowak',
+      affiliation: 'Laboratorium Badawcze',
+      department: 'Dział Techniczny',
+      position: 'Operator',
+      role: 'OPERATOR',
+      isActive: true,
+      isVerified: true,
+      language: 'pl',
+      timezone: 'Europe/Warsaw'
+    }
+  });
+
+  console.log('✅ Operator user created successfully');
+  console.log('📧 Email: operator@edith.pl');
+  console.log('🔑 Password: Operator123!');
+
+  return operator;
+}
+
+async function seedProtocols() {
+  console.log('📋 Seeding predefined protocols...');
 
   // Pobierz wszystkie protokoły
   const protocols = Object.values(ResearchProtocols);
@@ -144,13 +282,33 @@ async function main() {
     }
   }
 
-  console.log('🎉 Database seeding completed!');
+  console.log('✅ Protocol seeding completed!');
+}
+
+async function main() {
+  console.log('� Starting database seeding...');
+  
+  try {
+    // 1. Seed users first
+    await seedAdminUser();
+    await seedResearcher();
+    await seedOperator();
+    
+    // 2. Then seed protocols
+    await seedProtocols();
+    
+    console.log('�🎉 Database seeding completed successfully!');
+  } catch (error) {
+    console.error('❌ Error during seeding:', error);
+    throw error;
+  }
 }
 
 main()
   .catch((e) => {
     console.error('❌ Error during seeding:', e);
-    process.exit(1);
+    // Exit with error code
+    throw e;
   })
   .finally(async () => {
     await prisma.$disconnect();

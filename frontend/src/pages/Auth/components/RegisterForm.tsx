@@ -28,15 +28,14 @@ import {
   Phone,
   Business,
   Work,
-  Google,
-  Microsoft,
-  GitHub,
   CheckCircle,
   Cancel
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../hooks/useAuth';
 import { RegisterData, FormErrors } from '../types';
+import OAuthButtonGroup from './OAuthButtonGroup';
+import TermsAndConditions from './TermsAndConditions';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -82,6 +81,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string>('');
+  const [showTerms, setShowTerms] = useState(false);
 
   const calculatePasswordStrength = (password: string): PasswordStrength => {
     const checks = {
@@ -206,11 +206,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
     }
   };
 
-  const handleOAuthRegister = (provider: string) => {
-    console.log(`OAuth register with ${provider}`);
-    // Implement OAuth register logic here
-  };
-
   return (
     <Card sx={{ maxWidth: 600, width: '100%', mx: 'auto' }}>
       <CardContent sx={{ p: 4 }}>
@@ -232,35 +227,17 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
         )}
 
         {/* OAuth Buttons */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<Google />}
-            onClick={() => handleOAuthRegister('google')}
-            sx={{ py: 1.5 }}
-          >
-            Google
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<Microsoft />}
-            onClick={() => handleOAuthRegister('microsoft')}
-            sx={{ py: 1.5 }}
-          >
-            Microsoft
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GitHub />}
-            onClick={() => handleOAuthRegister('github')}
-            sx={{ py: 1.5 }}
-          >
-            GitHub
-          </Button>
-        </Stack>
+        <OAuthButtonGroup 
+          mode="register"
+          orientation="horizontal"
+          disabled={isSubmitting}
+          onSuccess={() => {
+            if (onSuccess) onSuccess();
+          }}
+          onError={(error) => {
+            setApiError(`${error.provider}: ${error.error}`);
+          }}
+        />
 
         <Divider sx={{ my: 3 }}>
           <Typography variant="body2" color="text.secondary">
@@ -270,10 +247,10 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
 
         {/* Register Form */}
         <Box component="form" onSubmit={handleSubmit}>
-          <Stack spacing={3}>
+          <Stack spacing={2.5}>
             {/* Name Fields */}
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+            <Grid container spacing={2} sx={{ ml: 0, width: '100%', '& > .MuiGrid-item': { pl: 0 } }}>
+              <Grid item xs={12} sm={6} sx={{ pl: '0 !important' }}>
                 <TextField
                   fullWidth
                   label="Imię"
@@ -292,7 +269,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                   required
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={6} sx={{ pl: '16px !important' }}>
                 <TextField
                   fullWidth
                   label="Nazwisko"
@@ -300,6 +277,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                   onChange={handleInputChange('lastName')}
                   error={!!errors.lastName}
                   helperText={errors.lastName}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Person color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
                   autoComplete="family-name"
                   required
                 />
@@ -334,6 +318,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
               onChange={handleInputChange('username')}
               error={!!errors.username}
               helperText={errors.username}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Person color="action" />
+                  </InputAdornment>
+                ),
+              }}
               autoComplete="username"
             />
 
@@ -370,7 +361,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
 
             {/* Password Strength Indicator */}
             {formData.password && (
-              <Box>
+              <Box sx={{ mt: 1 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                   <Typography variant="caption" color="text.secondary">
                     Siła hasła:
@@ -444,8 +435,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
             />
 
             {/* Optional Fields */}
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+            <Grid container spacing={2} sx={{ ml: 0, width: '100%', '& > .MuiGrid-item': { pl: 0 } }}>
+              <Grid item xs={12} sm={6} sx={{ pl: '0 !important' }}>
                 <TextField
                   fullWidth
                   label="Dział (opcjonalne)"
@@ -460,7 +451,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={6} sx={{ pl: '16px !important' }}>
                 <TextField
                   fullWidth
                   label="Stanowisko (opcjonalne)"
@@ -496,7 +487,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
             />
 
             {/* Terms and Marketing */}
-            <Box>
+            <Box sx={{ mt: 1 }}>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -508,19 +499,25 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
                 label={
                   <Typography variant="body2">
                     Akceptuję{' '}
-                    <Link href="#" sx={{ textDecoration: 'none' }}>
-                      Regulamin
-                    </Link>{' '}
-                    i{' '}
-                    <Link href="#" sx={{ textDecoration: 'none' }}>
-                      Politykę Prywatności
+                    <Link 
+                      component="button" 
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowTerms(true);
+                      }}
+                      sx={{ textDecoration: 'none', cursor: 'pointer' }}
+                    >
+                      Regulamin i Politykę Prywatności
                     </Link>
+                    {' '}*
                   </Typography>
                 }
                 required
+                sx={{ alignItems: 'flex-start', mb: 1 }}
               />
               {errors.acceptTerms && (
-                <Typography variant="caption" color="error" display="block">
+                <Typography variant="caption" color="error" display="block" sx={{ ml: 4 }}>
                   {errors.acceptTerms}
                 </Typography>
               )}
@@ -535,9 +532,10 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
               }
               label={
                 <Typography variant="body2">
-                  Wyrażam zgodę na otrzymywanie informacji marketingowych
+                  Wyrażam zgodę na otrzymywanie informacji marketingowych (opcjonalne)
                 </Typography>
               }
+              sx={{ alignItems: 'flex-start' }}
             />
 
             {/* Submit Button */}
@@ -549,6 +547,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
               disabled={isSubmitting || isLoading}
               sx={{
                 py: 1.5,
+                mt: 3,
                 position: 'relative'
               }}
             >
@@ -577,6 +576,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
           </Typography>
         </Box>
       </CardContent>
+
+      {/* Terms and Conditions Modal */}
+      <TermsAndConditions
+        open={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAccept={() => {
+          setFormData(prev => ({ ...prev, acceptTerms: true }));
+          if (errors.acceptTerms) {
+            setErrors(prev => ({ ...prev, acceptTerms: undefined }));
+          }
+        }}
+        showAcceptButton={true}
+      />
     </Card>
   );
 };

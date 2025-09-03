@@ -16,7 +16,7 @@ import { CreateStudy } from './pages/CreateStudy';
 import StudyStatistics from './pages/StudyStatistics';
 import ProtocolCreator from './pages/ProtocolCreator';
 import { Goals } from './pages/Goals';
-import { Auth, AuthProvider, useAuthContext } from './pages/Auth';
+import { Auth, AuthProvider, useAuthContext, OAuthProvider, OAuthCallback } from './pages/Auth';
 import NotFound from './pages/NotFound';
 
 // Tema Material-UI
@@ -68,44 +68,51 @@ const App: React.FC = () => {
       <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={pl}>
         <AuthProvider>
           <Router>
-            <Routes>
-              {/* Public Auth Route */}
-              <Route path="/auth" element={<Auth />} />
-              
-              {/* Protected Routes */}
-              <Route path="/*" element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <Routes>
-                      {/* Dashboard */}
-                      <Route path="/" element={<Dashboard />} />
+            <OAuthProvider>
+              <Routes>
+                {/* Public Auth Route */}
+                <Route path="/auth" element={<Auth />} />
+                
+                {/* OAuth Callback Routes */}
+                <Route path="/auth/oauth/google/callback" element={<OAuthCallback />} />
+                <Route path="/auth/oauth/github/callback" element={<OAuthCallback />} />
+                <Route path="/auth/oauth/microsoft/callback" element={<OAuthCallback />} />
+                
+                {/* Protected Routes */}
+                <Route path="/*" element={
+                  <ProtectedRoute>
+                    <MainLayout>
+                      <Routes>
+                        {/* Dashboard */}
+                        <Route path="/" element={<Dashboard />} />
+                        
+                        {/* Goals */}
+                        <Route path="/goals" element={<Goals />} />
+                        
+                        {/* Protocols */}
+                        <Route path="/protocols" element={<ProtocolsList />} />
+                        <Route path="/protocols/create" element={<ProtocolCreator />} />
+                        <Route path="/protocols/edit/:id" element={<ProtocolCreator />} />
                       
-                      {/* Goals */}
-                      <Route path="/goals" element={<Goals />} />
-                      
-                      {/* Protocols */}
-                      <Route path="/protocols" element={<ProtocolsList />} />
-                      <Route path="/protocols/create" element={<ProtocolCreator />} />
-                      <Route path="/protocols/edit/:id" element={<ProtocolCreator />} />
-                      
-                      {/* Legacy routes */}
-                      <Route path="/protocol-creator" element={<ProtocolCreator />} />
-                      <Route path="/create-protocol" element={<ProtocolCreator />} />
-                      
-                      {/* Studies */}
-                      <Route path="/studies" element={<StudyList />} />
-                      <Route path="/studies/create" element={<CreateStudy />} />
-                      <Route path="/studies/:id/execute" element={<ExecuteStudy />} />
-                      <Route path="/studies/:id/edit" element={<EditStudy />} />
-                      <Route path="/studies/:id/statistics" element={<StudyStatistics />} />
-                      
-                      {/* 404 */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </MainLayout>
-                </ProtectedRoute>
-              } />
-            </Routes>
+                        {/* Legacy routes */}
+                        <Route path="/protocol-creator" element={<ProtocolCreator />} />
+                        <Route path="/create-protocol" element={<ProtocolCreator />} />
+                        
+                        {/* Studies */}
+                        <Route path="/studies" element={<StudyList />} />
+                        <Route path="/studies/create" element={<CreateStudy />} />
+                        <Route path="/studies/:id/execute" element={<ExecuteStudy />} />
+                        <Route path="/studies/:id/edit" element={<EditStudy />} />
+                        <Route path="/studies/:id/statistics" element={<StudyStatistics />} />
+                        
+                        {/* 404 */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </MainLayout>
+                  </ProtectedRoute>
+                } />
+              </Routes>
+            </OAuthProvider>
           </Router>
         </AuthProvider>
       </LocalizationProvider>

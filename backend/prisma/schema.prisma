@@ -47,8 +47,25 @@ model User {
   createdGroups          UserGroup[]           @relation("GroupCreator")
   permissions            UserPermission[]
   sessions               UserSession[]
+  oauthAccounts          OAuthAccount[]
 
   @@map("users")
+}
+
+model OAuthAccount {
+  id          String      @id @default(cuid())
+  userId      String
+  provider    OAuthProvider
+  providerId  String
+  email       String?
+  profileData Json?
+  createdAt   DateTime    @default(now())
+  lastUsed    DateTime    @default(now())
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, provider])
+  @@unique([userId, provider])
+  @@map("oauth_accounts")
 }
 
 model UserSession {
@@ -484,6 +501,12 @@ enum UserRole {
   OPERATOR
   USER
   GUEST
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+  MICROSOFT
 }
 
 enum GroupRole {
