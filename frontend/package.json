@@ -1,0 +1,84 @@
+{
+  "name": "edith-frontend",
+  "version": "1.0.0",
+  "description": "Frontend aplikacji badawczej - React + Electron + TypeScript",
+  "homepage": "./",
+  "main": "public/electron.js",
+  "proxy": "http://localhost:5000",
+  "scripts": {
+    "dev": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-build": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist-win": "npm run build && electron-builder --win",
+    "dist-mac": "npm run build && electron-builder --mac",
+    "dist-linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.9",
+    "@mui/material": "^5.14.10",
+    "@mui/x-date-pickers": "^6.19.0",
+    "axios": "^1.5.0",
+    "date-fns": "^2.30.0",
+    "dayjs": "^1.11.18",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.46.1",
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.15.0",
+    "recharts": "^2.8.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.6.3",
+    "@types/react": "^18.2.22",
+    "@types/react-dom": "^18.2.7",
+    "@types/recharts": "^1.8.29",
+    "@types/uuid": "^9.0.4",
+    "concurrently": "^8.2.2",
+    "electron": "^26.2.1",
+    "electron-builder": "^24.6.4",
+    "react-scripts": "5.0.1",
+    "typescript": "^5.2.2",
+    "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.edith.research",
+    "productName": "Edith Research",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "public/electron.js",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

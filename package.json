@@ -1,0 +1,25 @@
+{
+  "name": "edith-research-app",
+  "version": "1.0.0",
+  "description": "Aplikacja do tworzenia schematów badań i ich przeprowadzania",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "start": "npm run start --workspace=backend",
+    "install:all": "npm install && npm install --workspace=backend && npm install --workspace=frontend && npm install --workspace=shared"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

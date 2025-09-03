@@ -1,0 +1,42 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Development Server",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -Command \"npm run dev\"",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start Backend",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -Command \"npm run dev\"",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start Frontend",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -Command \"npm run dev\"",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build Project",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -Command \"npm run build\"",
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

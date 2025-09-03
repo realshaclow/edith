@@ -1,0 +1,8 @@
+node_modules/
+build/
+dist/
+.next/
+.cache/
+.parcel-cache/
+out/
+coverage/
