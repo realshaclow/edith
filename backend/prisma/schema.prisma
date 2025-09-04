@@ -43,11 +43,16 @@ model User {
   protocols              Protocol[]
   studies                Study[]
   studySessions          StudySession[]
+  studyTeamMemberships   StudyTeamMember[]
+  studyComments          StudyComment[]
   groupMemberships       UserGroupMembership[]
   createdGroups          UserGroup[]           @relation("GroupCreator")
   permissions            UserPermission[]
   sessions               UserSession[]
   oauthAccounts          OAuthAccount[]
+  studyExecutions        StudyExecution[]
+  executionSamples       StudyExecutionSample[]
+  studyExports           StudyExport[]
 
   @@map("users")
 }
@@ -171,27 +176,32 @@ model Protocol {
   id                String                  @id @default(cuid())
   title             String
   description       String?
-  category          String
+  category          ProtocolCategory        @default(MECHANICAL)
   type              ProtocolType            @default(USER)
   version           String?                 @default("1.0")
-  difficulty        String?
+  difficulty        ProtocolDifficulty      @default(INTERMEDIATE)
   estimatedDuration String?
+  // Overview jako JSON ale z lepszą strukturą
   overview          Json?
-  equipment         Json?
-  materials         Json?
-  safetyGuidelines  Json?
-  references        Json?
-  notes             Json?
+  equipment         Json?                   // Array<Equipment>
+  materials         Json?                   // Array<string>
+  safetyGuidelines  Json?                   // Array<string>
+  references        Json?                   // Array<string>
+  notes             Json?                   // Array<string>
+  // Metadane
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
   createdBy         String?
   isPublic          Boolean                 @default(false)
   isActive          Boolean                 @default(true)
-  calculations      ProtocolCalculation[]
-  commonIssues      ProtocolCommonIssue[]
+  isPredefined      Boolean                 @default(false)
+  // Relacje
   steps             ProtocolStep[]
   testConditions    ProtocolTestCondition[]
+  calculations      ProtocolCalculation[]
+  acceptanceCriteria ProtocolAcceptanceCriterion[]
   typicalValues     ProtocolTypicalValue[]
+  commonIssues      ProtocolCommonIssue[]
   creator           User?                   @relation(fields: [createdBy], references: [id])
   studies           Study[]
 
@@ -205,9 +215,9 @@ model ProtocolStep {
   title        String
   description  String?
   duration     String?
-  instructions Json?
-  tips         Json?
-  safety       Json?
+  instructions Json?               // Array<string>
+  tips         Json?               // Array<string>  
+  safety       Json?               // Array<string>
   isRequired   Boolean             @default(true)
   createdAt    DateTime            @default(now())
   dataPoints   ProtocolDataPoint[]
@@ -253,13 +263,33 @@ model ProtocolTestCondition {
   @@map("protocol_test_conditions")
 }
 
+// Nowy model dla kryteriów akceptacji (zgodnie z frontendem)
+model ProtocolAcceptanceCriterion {
+  id          String                    @id @default(cuid())
+  protocolId  String
+  name        String
+  description String?
+  parameter   String
+  operator    AcceptanceOperator        @default(GREATER_THAN)
+  value       String
+  maxValue    String?                   // dla operatora BETWEEN
+  unit        String?
+  category    AcceptanceCategory        @default(PERFORMANCE)
+  severity    AcceptanceSeverity        @default(MAJOR)
+  isRequired  Boolean                   @default(true)
+  notes       String?
+  protocol    Protocol                  @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@map("protocol_acceptance_criteria")
+}
+
 model ProtocolCalculation {
   id          String              @id @default(cuid())
   protocolId  String
   name        String
   description String?
   formula     String
-  variables   Json
+  variables   Json                // Array<Variable> where Variable = {symbol, name, unit, description}
   unit        String?
   category    CalculationCategory @default(MECHANICAL)
   isRequired  Boolean             @default(false)
@@ -292,9 +322,9 @@ model ProtocolTypicalValue {
 model ProtocolCommonIssue {
   id         String        @id @default(cuid())
   protocolId String
-  issue      String
-  cause      String
-  solution   String
+  problem    String        // Zmieniono z 'issue' na 'problem' zgodnie z frontendem
+  causes     Json          // Array<string> - zgodnie z frontendem
+  solutions  Json          // Array<string> - zgodnie z frontendem  
   severity   IssueSeverity @default(MEDIUM)
   frequency  String?
   protocol   Protocol      @relation(fields: [protocolId], references: [id], onDelete: Cascade)
@@ -305,158 +335,205 @@ model ProtocolCommonIssue {
 model Study {
   id                 String                    @id @default(cuid())
   name               String
+  title              String?                   // Backward compatibility
   description        String?
   protocolId         String?
-  protocolName       String
+  protocolName       String?                   // Cache field for protocol name
   category           String?
-  settings           Json
-  parameters         Json?
+  // Ujednolicone z frontendem
+  settings           Json?                     // StudySettings object
+  parameters         Json?                     // StudyParameter array
+  dataCollectionPlan Json?                     // DataCollectionStep array
+  // Timeline and execution
+  startDate          DateTime?
+  endDate            DateTime?
+  estimatedDuration  String?                   // In hours/days
+  actualDuration     String?                   // Completed execution time
+  // Status and metadata
   status             StudyStatus               @default(DRAFT)
+  isTemplate         Boolean                   @default(false)
+  isPublic           Boolean                   @default(false)
+  priority           StudyPriority             @default(MEDIUM)
+  tags               Json?                     // Array of strings
+  // Audit fields
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
   createdBy          String
-  isTemplate         Boolean                   @default(true)
+  lastModifiedBy     String?
+  completedAt        DateTime?
+  approvedAt         DateTime?
+  approvedBy         String?
+  // Relations
   creator            User                      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   protocol           Protocol?                 @relation(fields: [protocolId], references: [id])
-  dataCollectionPlan StudyDataCollectionStep[]
   sessions           StudySession[]
+  samples            StudySample[]
+  results            StudyResult[]
+  attachments        StudyAttachment[]
+  teamMembers        StudyTeamMember[]
+  comments           StudyComment[]
+  executions         StudyExecution[]
+  exports            StudyExport[]
 
   @@map("studies")
 }
 
-model StudyDataCollectionStep {
-  id                 String                   @id @default(cuid())
-  studyId            String
-  stepNumber         Int
-  protocolStepId     String
-  stepName           String
-  description        String?
-  estimatedDuration  String?
-  isRequired         Boolean                  @default(true)
-  executionNotes     String?
-  study              Study                    @relation(fields: [studyId], references: [id], onDelete: Cascade)
-  dataPoints         StudyDataPoint[]
-  requiredConditions StudyRequiredCondition[]
-
-  @@map("study_data_collection_steps")
-}
-
-model StudyDataPoint {
-  id                 String                  @id @default(cuid())
-  stepId             String
-  name               String
-  description        String?
-  parameterType      DataPointType           @default(MEASUREMENT)
-  dataType           DataType                @default(NUMBER)
-  unit               String?
-  options            Json?
-  isRequired         Boolean                 @default(true)
-  minValue           Float?
-  maxValue           Float?
-  pattern            String?
-  isCalculated       Boolean                 @default(false)
-  calculationFormula String?
-  step               StudyDataCollectionStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
-
-  @@map("study_data_points")
-}
-
-model StudyRequiredCondition {
-  id        String                  @id @default(cuid())
-  stepId    String
-  name      String
-  value     String
-  unit      String?
-  tolerance String?
-  category  ConditionCategory       @default(ENVIRONMENTAL)
-  required  Boolean                 @default(true)
-  step      StudyDataCollectionStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
-
-  @@map("study_required_conditions")
-}
-
 model StudySession {
-  id               String                 @id @default(cuid())
-  studyId          String
-  sessionName      String
-  description      String?
-  operatorId       String
-  status           SessionStatus          @default(PLANNED)
-  currentStepId    String?
-  completedSteps   Int                    @default(0)
-  totalSteps       Int
-  completedSamples Int                    @default(0)
-  totalSamples     Int
-  startedAt        DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  notes            String?
-  testConditions   SessionTestCondition[]
-  attachments      StudyAttachment[]
-  results          StudyResult[]
-  samples          StudySample[]
-  operator         User                   @relation(fields: [operatorId], references: [id])
-  study            Study                  @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  id                String                 @id @default(cuid())
+  studyId           String
+  sessionName       String?
+  description       String?
+  operatorId        String?
+  operator          String?                // String fallback for operator name
+  equipment         String?
+  // Execution tracking
+  status            SessionStatus          @default(PLANNED)
+  progress          Json?                  // Progress tracking object
+  currentStepIndex  Int                    @default(0)
+  totalSteps        Int                    @default(0)
+  // Timing
+  startTime         DateTime?
+  endTime           DateTime?
+  estimatedDuration String?
+  actualDuration    String?
+  // Conditions and environment
+  conditions        Json?                  // Environmental conditions
+  testConditions    Json?                  // Test-specific conditions
+  // Data collection
+  data              Json?                  // Collected measurements and observations
+  calculations      Json?                  // Calculated results
+  // Quality and validation
+  quality           String?                // 'pass' | 'fail' | 'warning'
+  validationStatus  String?                // Validation results
+  // Metadata
+  notes             String?
+  tags              Json?                  // Array of tags
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  // Relations
+  operatorUser      User?                  @relation(fields: [operatorId], references: [id])
+  study             Study                  @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  samples           StudySample[]
+  results           StudyResult[]
+  attachments       StudyAttachment[]
 
   @@map("study_sessions")
 }
 
 model StudySample {
-  id           String        @id @default(cuid())
-  sessionId    String
-  sampleNumber Int
-  sampleName   String
-  description  String?
-  status       SampleStatus  @default(PENDING)
-  startTime    DateTime?
-  endTime      DateTime?
-  properties   Json?
-  notes        String?
-  results      StudyResult[]
-  session      StudySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id             String        @id @default(cuid())
+  studyId        String
+  sessionId      String?
+  sampleNumber   Int
+  sampleName     String
+  description    String?
+  // Sample tracking
+  status         SampleStatus  @default(PENDING)
+  batchNumber    String?
+  lotNumber      String?
+  preparation    Json?         // Preparation steps and notes
+  // Execution
+  startTime      DateTime?
+  endTime        DateTime?
+  actualDuration String?
+  // Data and measurements
+  data           Json?         // Sample-specific measurements
+  measurements   Json?         // Raw measurement data
+  conditions     Json?         // Sample-specific conditions
+  // Quality
+  quality        String?       // Quality assessment
+  anomalies      Json?         // Array of detected anomalies
+  // Metadata
+  notes          String?
+  tags           Json?         // Array of tags
+  location       String?       // Storage or test location
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  // Relations
+  study          Study         @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  session        StudySession? @relation(fields: [sessionId], references: [id])
+  results        StudyResult[]
 
   @@map("study_samples")
 }
 
 model StudyResult {
-  id              String       @id @default(cuid())
-  sessionId       String
-  sampleId        String?
-  stepId          String
-  dataPointId     String
-  value           String
-  unit            String?
-  measuredAt      DateTime     @default(now())
-  measuredBy      String
-  isValid         Boolean      @default(true)
-  validationNotes String?
-  isCalculated    Boolean      @default(false)
-  uncertainty     Float?
-  sample          StudySample? @relation(fields: [sampleId], references: [id])
-  session         StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id               String       @id @default(cuid())
+  studyId          String
+  sessionId        String
+  sampleId         String?
+  stepIndex        Int?         // Index of protocol step
+  stepName         String?      // Name of protocol step
+  // Result data
+  parameters       Json?        // Raw measurement parameters
+  calculatedValues Json?        // Computed results and calculations
+  measurements     Json?        // Individual measurement data points
+  // Quality assessment
+  quality          String?      // 'pass' | 'fail' | 'warning'
+  qualityScore     Float?       // Numerical quality score
+  outliers         Json?        // Array of detected outliers
+  // Validation
+  isValid          Boolean      @default(true)
+  validationNotes  String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  // Statistical data
+  statisticalData  Json?        // Statistics, averages, std dev, etc.
+  confidence       Float?       // Confidence level
+  uncertainty      Float?       // Measurement uncertainty
+  // Metadata
+  notes            String?
+  tags             Json?        // Array of tags
+  measuredAt       DateTime     @default(now())
+  measuredBy       String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  // Relations
+  study            Study        @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  session          StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sample           StudySample? @relation(fields: [sampleId], references: [id])
 
   @@map("study_results")
 }
 
-model SessionTestCondition {
-  id          String            @id @default(cuid())
-  sessionId   String
-  name        String
-  value       String
-  unit        String?
-  tolerance   String?
-  category    ConditionCategory @default(ENVIRONMENTAL)
-  actualValue String?
-  session     StudySession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+// New models for comprehensive study management
+model StudyTeamMember {
+  id          String             @id @default(cuid())
+  studyId     String
+  userId      String
+  role        StudyTeamRole      @default(MEMBER)
+  permissions Json?              // Array of permissions
+  joinedAt    DateTime           @default(now())
+  leftAt      DateTime?
+  isActive    Boolean            @default(true)
+  study       Study              @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id])
 
-  @@map("session_test_conditions")
+  @@unique([studyId, userId])
+  @@map("study_team_members")
+}
+
+model StudyComment {
+  id        String   @id @default(cuid())
+  studyId   String
+  authorId  String
+  content   String
+  isInternal Boolean  @default(false) // Internal team comments vs public
+  replyToId String?  // For threaded comments
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  study     Study    @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+  replyTo   StudyComment? @relation("CommentReplies", fields: [replyToId], references: [id])
+  replies   StudyComment[] @relation("CommentReplies")
+
+  @@map("study_comments")
 }
 
 model StudyAttachment {
   id           String       @id @default(cuid())
-  sessionId    String
-  stepId       String?
+  studyId      String
+  sessionId    String?
   filename     String
   originalName String
   fileType     String
@@ -464,9 +541,12 @@ model StudyAttachment {
   description  String?
   filePath     String
   url          String?
+  category     String?      // 'image', 'document', 'data', 'report', etc.
+  tags         Json?        // Array of tags
   uploadedAt   DateTime     @default(now())
   uploadedBy   String
-  session      StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  study        Study        @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  session      StudySession? @relation(fields: [sessionId], references: [id])
 
   @@map("study_attachments")
 }
@@ -606,11 +686,69 @@ enum IssueSeverity {
   CRITICAL
 }
 
+enum ProtocolCategory {
+  PHYSICAL
+  CHEMICAL
+  THERMAL
+  MECHANICAL
+  FIRE
+  WEATHERING
+  RHEOLOGICAL
+}
+
+enum ProtocolDifficulty {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum AcceptanceOperator {
+  GREATER_THAN
+  LESS_THAN
+  EQUAL
+  GREATER_EQUAL
+  LESS_EQUAL
+  BETWEEN
+  NOT_EQUAL
+}
+
+enum AcceptanceCategory {
+  PERFORMANCE
+  QUALITY
+  SAFETY
+  DIMENSIONAL
+  STATISTICAL
+}
+
+enum AcceptanceSeverity {
+  CRITICAL
+  MAJOR
+  MINOR
+}
+
 enum StudyStatus {
   DRAFT
   ACTIVE
+  COMPLETED
+  PAUSED
   ARCHIVED
   DELETED
+}
+
+enum StudyPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum StudyTeamRole {
+  OWNER
+  MANAGER
+  ANALYST
+  OPERATOR
+  OBSERVER
+  MEMBER
 }
 
 enum SessionStatus {
@@ -628,4 +766,234 @@ enum SampleStatus {
   COMPLETED
   FAILED
   REJECTED
+  SKIPPED
+}
+
+// Nowe modele dla ExecuteStudy i zarządzania badaniami
+
+model StudyExecution {
+  id                String                 @id @default(cuid())
+  studyId           String
+  studyName         String
+  protocolId        String?
+  protocolName      String
+  category          String
+  // Operator info
+  operatorId        String
+  operatorName      String
+  operatorPosition  String
+  // Execution status
+  status            ExecutionStatus        @default(NOT_STARTED)
+  progress          Float                  @default(0)
+  currentStep       Int                    @default(0)
+  totalSteps        Int                    @default(0)
+  // Timing
+  startedAt         DateTime?
+  completedAt       DateTime?
+  pausedAt          DateTime?
+  estimatedDuration String?
+  actualDuration    String?
+  // Environment
+  environment       Json                   // Environmental conditions
+  testConditions    Json?                  // Test specific conditions
+  // Results
+  overallStatus     ResultStatus           @default(PENDING)
+  summary           String?
+  recommendations   String?
+  attachments       Json?                  // Array of file paths
+  // Statistics
+  passedSamples     Int                    @default(0)
+  failedSamples     Int                    @default(0)
+  completionPercentage Float               @default(0)
+  // Metadata
+  notes             String?
+  tags              Json?                  // Array of tags
+  metadata          Json?                  // Additional metadata
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  // Relations
+  study             Study                  @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  operator          User                   @relation(fields: [operatorId], references: [id])
+  samples           StudyExecutionSample[]
+  measurements      StudyMeasurement[]
+  exports           StudyExport[]
+
+  @@map("study_executions")
+}
+
+model StudyExecutionSample {
+  id             String                @id @default(cuid())
+  executionId    String
+  sampleNumber   Int
+  name           String
+  description    String?
+  material       String?
+  // Status and tracking
+  status         SampleStatus          @default(PENDING)
+  progress       Float                 @default(0)
+  // Timing
+  startedAt      DateTime?
+  completedAt    DateTime?
+  estimatedTime  String?
+  actualTime     String?
+  // Operator
+  operatorId     String?
+  operatorName   String?
+  // Quality
+  quality        String?               // 'pass' | 'fail' | 'warning'
+  anomalies      Json?                 // Array of anomalies
+  // Data
+  properties     Json?                 // Sample properties
+  conditions     Json?                 // Sample specific conditions
+  // Metadata
+  notes          String?
+  tags           Json?                 // Array of tags
+  location       String?               // Physical location
+  batchNumber    String?
+  lotNumber      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  // Relations
+  execution      StudyExecution        @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  operator       User?                 @relation(fields: [operatorId], references: [id])
+  measurements   StudyMeasurement[]
+
+  @@map("study_execution_samples")
+}
+
+model StudyMeasurement {
+  id             String                @id @default(cuid())
+  executionId    String
+  sampleId       String
+  stepId         String
+  measurementId  String
+  // Measurement data
+  value          Float?
+  textValue      String?
+  unit           String?
+  // Quality and validation
+  isValid        Boolean               @default(true)
+  quality        String?               // 'good' | 'acceptable' | 'poor'
+  confidence     Float?                // 0-100
+  uncertainty    Float?
+  // Context
+  operator       String
+  equipment      String?
+  method         String?
+  // Timing
+  timestamp      DateTime              @default(now())
+  duration       String?
+  // Conditions
+  conditions     Json?                 // Measurement conditions
+  // Metadata
+  notes          String?
+  flags          Json?                 // Array of flags/warnings
+  rawData        Json?                 // Raw measurement data
+  calculatedData Json?                 // Processed data
+  attachments    Json?                 // Related files
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  // Relations
+  execution      StudyExecution        @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  sample         StudyExecutionSample  @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("study_measurements")
+}
+
+model StudyExport {
+  id              String           @id @default(cuid())
+  executionId     String
+  studyId         String
+  // Export details
+  format          ExportFormat
+  type            ExportType
+  filename        String
+  filepath        String?
+  size            Int?
+  // Content configuration
+  includeCharts   Boolean          @default(true)
+  includeSamples  Boolean          @default(true)
+  includeRawData  Boolean          @default(false)
+  template        String?          // Template used
+  // Status
+  status          ExportStatus     @default(PENDING)
+  progress        Float            @default(0)
+  // Timing
+  requestedAt     DateTime         @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime?        // When export expires
+  // User info
+  requestedById   String
+  requestedBy     String           // User name
+  // Download tracking
+  downloadCount   Int              @default(0)
+  lastDownloadAt  DateTime?
+  // Metadata
+  metadata        Json?            // Export configuration
+  errors          Json?            // Export errors if any
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  // Relations
+  execution       StudyExecution   @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  study           Study            @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  requestedUser   User             @relation(fields: [requestedById], references: [id])
+
+  @@map("study_exports")
+}
+
+model SystemConfiguration {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String   @default("general")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configurations")
+}
+
+// Enums dla nowych modeli
+
+enum ExecutionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ResultStatus {
+  PENDING
+  PASSED
+  FAILED
+  PARTIAL
+}
+
+enum ExportFormat {
+  PDF
+  EXCEL
+  CSV
+  JSON
+  XML
+}
+
+enum ExportType {
+  COMPLETE_REPORT
+  SAMPLE_RESULTS
+  MEASUREMENTS_ONLY
+  STATISTICS_ONLY
+  TEMPLATE
+  CHARTS_ONLY
+}
+
+enum ExportStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  EXPIRED
 }

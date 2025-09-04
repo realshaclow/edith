@@ -1,353 +1,436 @@
 import { useState, useCallback } from 'react';
-import { studiesApi } from '../services/api';
-import { ApiResponse, Study, StudyStatus, StudySession, StudyResult } from '../types';
-
-// Dla pozostałych endpoint'ów które nie są w studiesApi, importujemy api
-import api from '../services/api';
-
-export interface CreateStudyRequest {
-  name: string;
-  description?: string;
-  protocolId: string;
-  category?: string;
-  settings?: Record<string, any>;
-  parameters?: Record<string, any>;
-}
-
-export interface UpdateStudyRequest {
-  name?: string;
-  description?: string;
-  status?: StudyStatus;
-  category?: string;
-  settings?: Record<string, any>;
-  parameters?: Record<string, any>;
-}
-
-export interface CreateStudySessionRequest {
-  studyId: string;
-  sampleId?: string;
-  operator?: string;
-  equipment?: string;
-  data: Record<string, number>;
-  conditions?: Record<string, any>;
-  notes?: string;
-}
-
-export interface UpdateStudySessionRequest {
-  sampleId?: string;
-  operator?: string;
-  equipment?: string;
-  data?: Record<string, number>;
-  conditions?: Record<string, any>;
-  notes?: string;
-  endTime?: Date;
-}
+import { studiesApi, StudyDto, CreateStudyDto, UpdateStudyDto, StudyQueryParams, StudySessionDto, CreateStudySessionDto, UpdateStudySessionDto, StudyStatsDto } from '../services/studiesApi';
 
 export interface UseStudiesReturn {
-  studies: Study[];
-  study: Study | null;
-  sessions: StudySession[];
-  session: StudySession | null;
-  results: StudyResult[];
-  isLoading: boolean;
+  studies: StudyDto[];
+  study: StudyDto | null;
+  sessions: StudySessionDto[];
+  session: StudySessionDto | null;
+  stats: StudyStatsDto | null;
+  loading: boolean;
+  isLoading: boolean; // Alias for loading for backward compatibility
   error: string | null;
-  fetchStudies: () => Promise<void>;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null;
+
+  // Study operations
+  fetchStudies: (params?: StudyQueryParams) => Promise<void>;
   fetchStudy: (id: string) => Promise<void>;
-  createStudy: (study: CreateStudyRequest) => Promise<Study | null>;
-  updateStudy: (id: string, updates: UpdateStudyRequest) => Promise<Study | null>;
-  updateStudyStatus: (id: string, status: StudyStatus) => Promise<Study | null>;
+  createStudy: (data: CreateStudyDto) => Promise<StudyDto | null>;
+  updateStudy: (id: string, data: UpdateStudyDto) => Promise<StudyDto | null>;
   deleteStudy: (id: string) => Promise<boolean>;
-  fetchStudySessions: (studyId: string) => Promise<void>;
-  fetchStudySession: (sessionId: string) => Promise<void>;
-  createStudySession: (session: CreateStudySessionRequest) => Promise<StudySession | null>;
-  updateStudySession: (sessionId: string, updates: UpdateStudySessionRequest) => Promise<StudySession | null>;
-  deleteStudySession: (sessionId: string) => Promise<boolean>;
-  fetchStudyResults: (studyId: string) => Promise<void>;
-  clearError: () => void;
+  clearStudy: () => void;
+
+  // Session operations
+  fetchSessions: (studyId: string, params?: { page?: number; limit?: number; status?: string; operatorId?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => Promise<void>;
+  fetchSession: (sessionId: string) => Promise<void>;
+  createSession: (studyId: string, data: CreateStudySessionDto) => Promise<StudySessionDto | null>;
+  updateSession: (sessionId: string, data: UpdateStudySessionDto) => Promise<StudySessionDto | null>;
+  deleteSession: (sessionId: string) => Promise<boolean>;
+  clearSession: () => void;
+
+  // Statistics
+  fetchStats: () => Promise<void>;
+
+  // Bulk operations
+  bulkDeleteStudies: (studyIds: string[]) => Promise<boolean>;
+
+  // Export
+  exportStudyData: (studyId: string, format?: 'json' | 'csv') => Promise<any>;
+
+  // Backward compatibility methods
+  updateStudyStatus: (id: string, status: string) => Promise<StudyDto | null>;
 }
 
 export const useStudies = (): UseStudiesReturn => {
-  const [studies, setStudies] = useState<Study[]>([]);
-  const [study, setStudy] = useState<Study | null>(null);
-  const [sessions, setSessions] = useState<StudySession[]>([]);
-  const [session, setSession] = useState<StudySession | null>(null);
-  const [results, setResults] = useState<StudyResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [studies, setStudies] = useState<StudyDto[]>([]);
+  const [study, setStudy] = useState<StudyDto | null>(null);
+  const [sessions, setSessions] = useState<StudySessionDto[]>([]);
+  const [session, setSession] = useState<StudySessionDto | null>(null);
+  const [stats, setStats] = useState<StudyStatsDto | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<{
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null>(null);
 
-  const clearError = useCallback(() => {
-    setError(null);
+  // Helper function to handle errors
+  const handleError = useCallback((error: any, operation: string) => {
+    console.error(`Error in ${operation}:`, error);
+    const message = error?.response?.data?.error || error?.message || `Failed to ${operation}`;
+    setError(message);
   }, []);
 
-  // Studies API calls
-  const fetchStudies = useCallback(async () => {
-    console.log('fetchStudies - Starting...');
-    setIsLoading(true);
-    setError(null);
+  // Study operations
+  const fetchStudies = useCallback(async (params?: StudyQueryParams) => {
     try {
-      console.log('fetchStudies - Calling API...');
-      const response = await studiesApi.getAll();
-      console.log('fetchStudies - API response:', response);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.getAll(params);
+      
       if (response.success && response.data) {
         setStudies(response.data);
-        console.log('fetchStudies - Studies set:', response.data);
+        if (response.pagination) {
+          setPagination(response.pagination);
+        }
       } else {
-        setError(response.error || 'Błąd podczas pobierania badań');
-        console.error('fetchStudies - API error:', response.error);
+        throw new Error(response.error || 'Failed to fetch studies');
       }
-    } catch (err) {
-      console.error('fetchStudies - Network error:', err);
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'fetch studies');
+      setStudies([]);
     } finally {
-      setIsLoading(false);
-      console.log('fetchStudies - Finished');
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
   const fetchStudy = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
     try {
+      setLoading(true);
+      setError(null);
+      
       const response = await studiesApi.getById(id);
+      
       if (response.success && response.data) {
         setStudy(response.data);
       } else {
-        setError(response.error || 'Błąd podczas pobierania badania');
+        throw new Error(response.error || 'Failed to fetch study');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'fetch study');
+      setStudy(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const createStudy = useCallback(async (studyData: CreateStudyRequest): Promise<Study | null> => {
-    setIsLoading(true);
-    setError(null);
+  const createStudy = useCallback(async (data: CreateStudyDto): Promise<StudyDto | null> => {
     try {
-      const response = await studiesApi.create(studyData);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.create(data);
+      
       if (response.success && response.data) {
-        setStudies(prev => [...prev, response.data!]);
+        // Add to studies list if we have one
+        setStudies(prev => [response.data!, ...prev]);
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas tworzenia badania');
-        return null;
+        throw new Error(response.error || 'Failed to create study');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'create study');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const updateStudy = useCallback(async (id: string, updates: UpdateStudyRequest): Promise<Study | null> => {
-    setIsLoading(true);
-    setError(null);
+  const updateStudy = useCallback(async (id: string, data: UpdateStudyDto): Promise<StudyDto | null> => {
     try {
-      const response: ApiResponse<Study> = await api.put(`/studies/${id}`, updates);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.update(id, data);
+      
       if (response.success && response.data) {
-        setStudies(prev => prev.map(s => s.id === id ? response.data! : s));
+        // Update in studies list
+        setStudies(prev => prev.map(study => 
+          study.id === id ? response.data! : study
+        ));
+        
+        // Update current study if it's the same one
         if (study?.id === id) {
           setStudy(response.data);
         }
+        
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas aktualizacji badania');
-        return null;
+        throw new Error(response.error || 'Failed to update study');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'update study');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [study]);
-
-  const updateStudyStatus = useCallback(async (id: string, status: StudyStatus): Promise<Study | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response: ApiResponse<Study> = await api.patch(`/studies/${id}/status`, { status });
-      if (response.success && response.data) {
-        setStudies(prev => prev.map(s => s.id === id ? response.data! : s));
-        if (study?.id === id) {
-          setStudy(response.data);
-        }
-        return response.data;
-      } else {
-        setError(response.error || 'Błąd podczas zmiany statusu badania');
-        return null;
-      }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [study]);
+  }, [handleError, study?.id]);
 
   const deleteStudy = useCallback(async (id: string): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
     try {
-      const response: ApiResponse = await api.delete(`/studies/${id}`);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.delete(id);
+      
       if (response.success) {
-        setStudies(prev => prev.filter(s => s.id !== id));
+        // Remove from studies list
+        setStudies(prev => prev.filter(study => study.id !== id));
+        
+        // Clear current study if it's the same one
         if (study?.id === id) {
           setStudy(null);
         }
+        
         return true;
       } else {
-        setError(response.error || 'Błąd podczas usuwania badania');
-        return false;
+        throw new Error(response.error || 'Failed to delete study');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'delete study');
       return false;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [study]);
+  }, [handleError, study?.id]);
 
-  // Study Sessions API calls
-  const fetchStudySessions = useCallback(async (studyId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response: ApiResponse<StudySession[]> = await api.get(`/studies/${studyId}/sessions`);
-      if (response.success && response.data) {
-        setSessions(response.data);
-      } else {
-        setError(response.error || 'Błąd podczas pobierania sesji badania');
-      }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
-    } finally {
-      setIsLoading(false);
-    }
+  const clearStudy = useCallback(() => {
+    setStudy(null);
   }, []);
 
-  const fetchStudySession = useCallback(async (sessionId: string) => {
-    setIsLoading(true);
-    setError(null);
+  // Session operations
+  const fetchSessions = useCallback(async (studyId: string, params?: { page?: number; limit?: number; status?: string; operatorId?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => {
     try {
-      const response: ApiResponse<StudySession> = await api.get(`/studies/sessions/${sessionId}`);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.getSessions(studyId, params);
+      
+      if (response.success && response.data) {
+        setSessions(response.data);
+        if (response.pagination) {
+          setPagination(response.pagination);
+        }
+      } else {
+        throw new Error(response.error || 'Failed to fetch sessions');
+      }
+    } catch (error) {
+      handleError(error, 'fetch sessions');
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const fetchSession = useCallback(async (sessionId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.getSession(sessionId);
+      
       if (response.success && response.data) {
         setSession(response.data);
       } else {
-        setError(response.error || 'Błąd podczas pobierania sesji');
+        throw new Error(response.error || 'Failed to fetch session');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'fetch session');
+      setSession(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const createStudySession = useCallback(async (sessionData: CreateStudySessionRequest): Promise<StudySession | null> => {
-    setIsLoading(true);
-    setError(null);
+  const createSession = useCallback(async (studyId: string, data: CreateStudySessionDto): Promise<StudySessionDto | null> => {
     try {
-      const response: ApiResponse<StudySession> = await api.post('/studies/sessions', sessionData);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.createSession(studyId, data);
+      
       if (response.success && response.data) {
-        setSessions(prev => [...prev, response.data!]);
+        // Add to sessions list if we have one
+        setSessions(prev => [response.data!, ...prev]);
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas tworzenia sesji badania');
-        return null;
+        throw new Error(response.error || 'Failed to create session');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'create session');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const updateStudySession = useCallback(async (sessionId: string, updates: UpdateStudySessionRequest): Promise<StudySession | null> => {
-    setIsLoading(true);
-    setError(null);
+  const updateSession = useCallback(async (sessionId: string, data: UpdateStudySessionDto): Promise<StudySessionDto | null> => {
     try {
-      const response: ApiResponse<StudySession> = await api.put(`/studies/sessions/${sessionId}`, updates);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.updateSession(sessionId, data);
+      
       if (response.success && response.data) {
-        setSessions(prev => prev.map(s => s.id === sessionId ? response.data! : s));
+        // Update in sessions list
+        setSessions(prev => prev.map(session => 
+          session.id === sessionId ? response.data! : session
+        ));
+        
+        // Update current session if it's the same one
         if (session?.id === sessionId) {
           setSession(response.data);
         }
+        
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas aktualizacji sesji');
-        return null;
+        throw new Error(response.error || 'Failed to update session');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'update session');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [session]);
+  }, [handleError, session?.id]);
 
-  const deleteStudySession = useCallback(async (sessionId: string): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
+  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
     try {
-      const response: ApiResponse = await api.delete(`/studies/sessions/${sessionId}`);
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.deleteSession(sessionId);
+      
       if (response.success) {
-        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        // Remove from sessions list
+        setSessions(prev => prev.filter(session => session.id !== sessionId));
+        
+        // Clear current session if it's the same one
         if (session?.id === sessionId) {
           setSession(null);
         }
+        
         return true;
       } else {
-        setError(response.error || 'Błąd podczas usuwania sesji');
-        return false;
+        throw new Error(response.error || 'Failed to delete session');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'delete session');
       return false;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [session]);
+  }, [handleError, session?.id]);
 
-  const fetchStudyResults = useCallback(async (studyId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response: ApiResponse<StudyResult[]> = await api.get(`/studies/${studyId}/results`);
-      if (response.success && response.data) {
-        setResults(response.data);
-      } else {
-        setError(response.error || 'Błąd podczas pobierania wyników badania');
-      }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
-    } finally {
-      setIsLoading(false);
-    }
+  const clearSession = useCallback(() => {
+    setSession(null);
   }, []);
+
+  // Statistics
+  const fetchStats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.getStats();
+      
+      if (response.success && response.data) {
+        setStats(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to fetch stats');
+      }
+    } catch (error) {
+      handleError(error, 'fetch stats');
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Bulk operations
+  const bulkDeleteStudies = useCallback(async (studyIds: string[]): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await studiesApi.bulkDelete(studyIds);
+      
+      if (response.success) {
+        // Remove from studies list
+        setStudies(prev => prev.filter(study => !studyIds.includes(study.id)));
+        
+        // Clear current study if it's one of the deleted ones
+        if (study && studyIds.includes(study.id)) {
+          setStudy(null);
+        }
+        
+        return true;
+      } else {
+        throw new Error(response.error || 'Failed to delete studies');
+      }
+    } catch (error) {
+      handleError(error, 'bulk delete studies');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError, study]);
+
+  // Export
+  const exportStudyData = useCallback(async (studyId: string, format: 'json' | 'csv' = 'json'): Promise<any> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const data = await studiesApi.exportData(studyId, format);
+      return data;
+    } catch (error) {
+      handleError(error, 'export study data');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Backward compatibility method for updateStudyStatus
+  const updateStudyStatus = useCallback(async (id: string, status: string): Promise<StudyDto | null> => {
+    const statusMapping: Record<string, any> = {
+      'DRAFT': 'DRAFT',
+      'ACTIVE': 'ACTIVE', 
+      'COMPLETED': 'COMPLETED',
+      'PAUSED': 'PAUSED',
+      'ARCHIVED': 'ARCHIVED'
+    };
+    
+    const mappedStatus = statusMapping[status] || status;
+    return updateStudy(id, { status: mappedStatus });
+  }, [updateStudy]);
 
   return {
     studies,
     study,
     sessions,
     session,
-    results,
-    isLoading,
+    stats,
+    loading,
+    isLoading: loading, // Alias for backward compatibility
     error,
+    pagination,
     fetchStudies,
     fetchStudy,
     createStudy,
     updateStudy,
-    updateStudyStatus,
     deleteStudy,
-    fetchStudySessions,
-    fetchStudySession,
-    createStudySession,
-    updateStudySession,
-    deleteStudySession,
-    fetchStudyResults,
-    clearError
+    clearStudy,
+    fetchSessions,
+    fetchSession,
+    createSession,
+    updateSession,
+    deleteSession,
+    clearSession,
+    fetchStats,
+    bulkDeleteStudies,
+    exportStudyData,
+    updateStudyStatus, // Backward compatibility
   };
 };
+
+export default useStudies;

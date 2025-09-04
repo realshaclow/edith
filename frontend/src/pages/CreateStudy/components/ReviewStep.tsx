@@ -4,351 +4,479 @@ import {
   Typography,
   Card,
   CardContent,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Chip,
-  Divider,
   Grid,
   Alert,
+  Chip,
+  Divider,
   List,
   ListItem,
   ListItemText,
-  ListItemIcon
+  ListItemIcon,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  useTheme,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
-  ExpandMore,
-  CheckCircle,
-  Warning,
-  Info,
-  Person,
-  Build,
-  Inventory,
-  Schedule,
-  Assignment
+  CheckCircle as CompleteIcon,
+  Warning as WarningIcon,
+  ExpandMore as ExpandMoreIcon,
+  Science as ProtocolIcon,
+  Person as OperatorIcon,
+  Engineering as EquipmentIcon,
+  Assignment as TaskIcon,
+  Timer as SessionIcon,
+  Tune as SettingsIcon,
 } from '@mui/icons-material';
-import { StudyFormData, ProtocolForStudy } from '../types';
+import { CreateStudyStepProps } from '../types';
 
-interface ReviewStepProps {
-  studyData: StudyFormData;
-  selectedProtocol: ProtocolForStudy | null;
-  isStepValid: (step: string) => boolean;
-}
-
-export const ReviewStep: React.FC<ReviewStepProps> = ({
+export const ReviewStep: React.FC<CreateStudyStepProps> = ({
   studyData,
-  selectedProtocol,
-  isStepValid
+  protocolData,
+  errors,
+  isValid,
 }) => {
-  const getValidationIcon = (stepName: string) => {
-    return isStepValid(stepName) ? (
-      <CheckCircle color="success" />
-    ) : (
-      <Warning color="warning" />
+  const theme = useTheme();
+
+  const getValidationSummary = () => {
+    const warnings: string[] = [];
+    
+    if (!studyData.operatorInfo.name) {
+      warnings.push('Nie podano nazwiska operatora');
+    }
+    
+    if (studyData.equipmentList.length === 0) {
+      warnings.push('Nie dodano żadnego wyposażenia');
+    }
+    
+    if (studyData.stepMeasurements.length === 0) {
+      warnings.push('Nie skonfigurowano żadnych pomiarów');
+    }
+    
+    const totalMeasurements = studyData.stepMeasurements.reduce(
+      (sum, step) => sum + step.measurements.length, 0
     );
+    
+    if (totalMeasurements === 0) {
+      warnings.push('Nie zdefiniowano żadnych pomiarów w krokach');
+    }
+
+    return warnings;
   };
 
-  const getValidationColor = (stepName: string) => {
-    return isStepValid(stepName) ? 'success' : 'warning';
+  const warnings = getValidationSummary();
+
+  const calculateSessionInfo = () => {
+    const { numberOfSamples } = studyData.settings;
+    const { allowMultipleSessions, maxSamplesPerSession } = studyData.settings.sessionSettings;
+    
+    if (!allowMultipleSessions) {
+      return { sessions: 1, samplesPerSession: numberOfSamples };
+    }
+    
+    const totalSessions = Math.ceil(numberOfSamples / maxSamplesPerSession);
+    return { sessions: totalSessions, samplesPerSession: maxSamplesPerSession };
   };
 
-  const calculateTotalBudget = () => {
-    const breakdown = studyData.resources.budget.breakdown;
-    return breakdown.personnel + breakdown.equipment + breakdown.materials + breakdown.overhead + breakdown.contingency;
-  };
+  const sessionInfo = calculateSessionInfo();
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Przegląd i potwierdzenie badania
-        </Typography>
+    <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
+      <Typography variant="h5" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
+        📋 Przegląd i Potwierdzenie
+      </Typography>
 
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Sprawdź wszystkie dane przed utworzeniem badania. Po utworzeniu niektóre informacje mogą być trudne do zmiany.
-        </Alert>
+      {/* Status walidacji */}
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          {isValid ? (
+            <Alert severity="success" sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                ✅ Badanie gotowe do utworzenia
+              </Typography>
+              <Typography variant="body2">
+                Wszystkie wymagane informacje zostały podane. Możesz teraz utworzyć badanie.
+              </Typography>
+            </Alert>
+          ) : (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                ❌ Wymagane uzupełnienie danych
+              </Typography>
+              <Typography variant="body2">
+                Sprawdź poprzednie kroki i uzupełnij brakujące informacje.
+              </Typography>
+            </Alert>
+          )}
 
-        <Box display="flex" flexDirection="column" gap={2}>
-          {/* Validation Status */}
+          {warnings.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                ⚠️ Ostrzeżenia:
+              </Typography>
+              <List dense>
+                {warnings.map((warning, index) => (
+                  <ListItem key={index} sx={{ py: 0.5, pl: 0 }}>
+                    <ListItemIcon sx={{ minWidth: 20 }}>
+                      <WarningIcon fontSize="small" color="warning" />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={warning}
+                      primaryTypographyProps={{ fontSize: '0.875rem' }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+        </Grid>
+
+        {/* Podstawowe informacje */}
+        <Grid item xs={12} md={6}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Status walidacji
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <ProtocolIcon color="primary" sx={{ mr: 1 }} />
+                Podstawowe Informacje
               </Typography>
+              
+              <List dense>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Nazwa badania"
+                    secondary={studyData.name || 'Nie podano'}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Protokół"
+                    secondary={studyData.protocolName || 'Nie wybrano'}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Kategoria"
+                    secondary={studyData.category || 'Nie podano'}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Opis"
+                    secondary={studyData.description || 'Brak opisu'}
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Konfiguracja próbek i sesji */}
+        <Grid item xs={12} md={6}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <SessionIcon color="secondary" sx={{ mr: 1 }} />
+                Próbki i Sesje
+              </Typography>
+              
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('basic-info')}
-                    <Typography>Podstawowe informacje</Typography>
-                    <Chip 
-                      label={isStepValid('basic-info') ? 'Kompletne' : 'Niekompletne'} 
-                      size="small" 
-                      color={getValidationColor('basic-info')}
-                    />
-                  </Box>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Liczba próbek
+                  </Typography>
+                  <Typography variant="h6" color="primary">
+                    {studyData.settings.numberOfSamples}
+                  </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('protocol-selection')}
-                    <Typography>Wybór protokołu</Typography>
-                    <Chip 
-                      label={isStepValid('protocol-selection') ? 'Wybrany' : 'Brak wyboru'} 
-                      size="small" 
-                      color={getValidationColor('protocol-selection')}
-                    />
-                  </Box>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Prefiks próbek
+                  </Typography>
+                  <Typography variant="h6" color="primary">
+                    {studyData.settings.samplePrefix}
+                  </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('parameters')}
-                    <Typography>Parametry</Typography>
-                    <Chip 
-                      label={isStepValid('parameters') ? 'Ustawione' : 'Wymagane'} 
-                      size="small" 
-                      color={getValidationColor('parameters')}
-                    />
-                  </Box>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Liczba sesji
+                  </Typography>
+                  <Typography variant="h6" color="secondary">
+                    {sessionInfo.sessions}
+                  </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('settings')}
-                    <Typography>Ustawienia</Typography>
-                    <Chip 
-                      label={isStepValid('settings') ? 'Skonfigurowane' : 'Niekompletne'} 
-                      size="small" 
-                      color={getValidationColor('settings')}
-                    />
-                  </Box>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('timeline')}
-                    <Typography>Harmonogram</Typography>
-                    <Chip 
-                      label={isStepValid('timeline') ? 'Zaplanowany' : 'Wymagany'} 
-                      size="small" 
-                      color={getValidationColor('timeline')}
-                    />
-                  </Box>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    {getValidationIcon('resources')}
-                    <Typography>Zasoby</Typography>
-                    <Chip 
-                      label={isStepValid('resources') ? 'Zdefiniowane' : 'Opcjonalne'} 
-                      size="small" 
-                      color={getValidationColor('resources')}
-                    />
-                  </Box>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Próbek na sesję
+                  </Typography>
+                  <Typography variant="h6" color="secondary">
+                    {sessionInfo.samplesPerSession}
+                  </Typography>
                 </Grid>
               </Grid>
             </CardContent>
           </Card>
+        </Grid>
 
-          {/* Basic Information */}
-          <Accordion defaultExpanded>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Assignment />
-                <Typography variant="h6">Podstawowe informacje</Typography>
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="text.secondary">Nazwa badania</Typography>
-                  <Typography variant="body1">{studyData.name || 'Nie podano'}</Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="text.secondary">Opis</Typography>
-                  <Typography variant="body1">{studyData.description || 'Nie podano'}</Typography>
-                </Grid>
-                {studyData.objectives.length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">Cele badania</Typography>
-                    <List dense>
-                      {studyData.objectives.map((objective, index) => (
-                        <ListItem key={index}>
-                          <ListItemIcon>
-                            <Info fontSize="small" />
-                          </ListItemIcon>
-                          <ListItemText primary={objective} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Grid>
+        {/* Operator */}
+        <Grid item xs={12} md={6}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <OperatorIcon color="success" sx={{ mr: 1 }} />
+                Operator
+              </Typography>
+              
+              <List dense>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Imię i nazwisko"
+                    secondary={studyData.operatorInfo.name || 'Nie podano'}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="Stanowisko"
+                    secondary={studyData.operatorInfo.position || 'Nie podano'}
+                  />
+                </ListItem>
+                {studyData.operatorInfo.operatorId && (
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemText 
+                      primary="ID operatora"
+                      secondary={studyData.operatorInfo.operatorId}
+                    />
+                  </ListItem>
                 )}
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Protocol Information */}
-          {selectedProtocol && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Assignment />
-                  <Typography variant="h6">Wybrany protokół</Typography>
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Nazwa protokołu</Typography>
-                    <Typography variant="body1">{selectedProtocol.title}</Typography>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Kategoria</Typography>
-                    <Typography variant="body1">{selectedProtocol.category}</Typography>
-                  </Grid>
-                  {selectedProtocol.description && (
-                    <Grid item xs={12}>
-                      <Typography variant="subtitle2" color="text.secondary">Opis protokołu</Typography>
-                      <Typography variant="body1">{selectedProtocol.description}</Typography>
-                    </Grid>
+        {/* Wyposażenie */}
+        <Grid item xs={12} md={6}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <EquipmentIcon color="warning" sx={{ mr: 1 }} />
+                Wyposażenie ({studyData.equipmentList.length})
+              </Typography>
+              
+              {studyData.equipmentList.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Nie dodano wyposażenia
+                </Typography>
+              ) : (
+                <List dense>
+                  {studyData.equipmentList.slice(0, 3).map((equipment, index) => (
+                    <ListItem key={index} sx={{ px: 0 }}>
+                      <ListItemText 
+                        primary={equipment.name || `Sprzęt #${index + 1}`}
+                        secondary={equipment.model || 'Brak modelu'}
+                      />
+                    </ListItem>
+                  ))}
+                  {studyData.equipmentList.length > 3 && (
+                    <ListItem sx={{ px: 0 }}>
+                      <ListItemText 
+                        primary={`... i ${studyData.equipmentList.length - 3} więcej`}
+                        secondary="Zobacz pełną listę w poprzednim kroku"
+                      />
+                    </ListItem>
                   )}
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
-          )}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Parameters */}
-          {studyData.parameters.length > 0 && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Assignment />
-                  <Typography variant="h6">Parametry ({studyData.parameters.length})</Typography>
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Grid container spacing={2}>
-                  {studyData.parameters.map((param, index) => (
-                    <Grid item xs={12} md={6} key={param.id}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2">{param.name}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Typ: {param.type} | Wartość: {param.value || 'Nie ustawiono'}
-                            {param.unit && ` ${param.unit}`}
-                          </Typography>
-                          {param.description && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                              {param.description}
-                            </Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
-          )}
-
-          {/* Timeline */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Schedule />
-                <Typography variant="h6">Harmonogram</Typography>
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="text.secondary">Szacowany czas trwania</Typography>
-                  <Typography variant="body1">{studyData.timeline.estimatedDuration || 'Nie podano'}</Typography>
-                </Grid>
-                {studyData.timeline.phases.length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">Fazy ({studyData.timeline.phases.length})</Typography>
-                    <List dense>
-                      {studyData.timeline.phases.map((phase) => (
-                        <ListItem key={phase.id}>
-                          <ListItemText 
-                            primary={phase.name} 
-                            secondary={`${phase.duration} - ${phase.description}`}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Grid>
-                )}
-                {studyData.timeline.milestones.length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">Kamienie milowe ({studyData.timeline.milestones.length})</Typography>
-                    <List dense>
-                      {studyData.timeline.milestones.map((milestone) => (
-                        <ListItem key={milestone.id}>
-                          <ListItemText 
-                            primary={milestone.name} 
-                            secondary={`${milestone.date} (${milestone.type}) - ${milestone.description}`}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Grid>
-                )}
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
-
-          {/* Resources Summary */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Person />
-                <Typography variant="h6">Zasoby</Typography>
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <Box display="flex" alignItems="center" gap={1} mb={1}>
-                    <Person fontSize="small" />
-                    <Typography variant="subtitle2">Personel: {studyData.resources.personnel.length}</Typography>
-                  </Box>
-                  {studyData.resources.personnel.map((person) => (
-                    <Typography key={person.id} variant="body2" color="text.secondary">
-                      • {person.name} ({person.role})
-                    </Typography>
-                  ))}
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Box display="flex" alignItems="center" gap={1} mb={1}>
-                    <Build fontSize="small" />
-                    <Typography variant="subtitle2">Sprzęt: {studyData.resources.equipment.length}</Typography>
-                  </Box>
-                  {studyData.resources.equipment.map((equipment) => (
-                    <Typography key={equipment.id} variant="body2" color="text.secondary">
-                      • {equipment.name}
-                    </Typography>
-                  ))}
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Box display="flex" alignItems="center" gap={1} mb={1}>
-                    <Inventory fontSize="small" />
-                    <Typography variant="subtitle2">Materiały: {studyData.resources.materials.length}</Typography>
-                  </Box>
-                  {studyData.resources.materials.map((material) => (
-                    <Typography key={material.id} variant="body2" color="text.secondary">
-                      • {material.name} ({material.quantity})
-                    </Typography>
-                  ))}
-                </Grid>
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 1 }} />
-                  <Typography variant="h6" color="primary">
-                    Budżet całkowity: {calculateTotalBudget().toLocaleString()} {studyData.resources.budget.currency}
+        {/* Pomiary per krok */}
+        <Grid item xs={12}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <TaskIcon color="info" sx={{ mr: 1 }} />
+                Konfiguracja Pomiarów
+              </Typography>
+              
+              {studyData.stepMeasurements.length === 0 ? (
+                <Alert severity="warning">
+                  <Typography variant="body2">
+                    Nie skonfigurowano żadnych pomiarów. Przejdź do kroku "Pomiary per Krok" aby dodać pomiary.
                   </Typography>
+                </Alert>
+              ) : (
+                <Box>
+                  <Box sx={{ mb: 2 }}>
+                    <Chip 
+                      label={`${studyData.stepMeasurements.length} kroków`} 
+                      color="primary" 
+                      sx={{ mr: 1 }}
+                    />
+                    <Chip 
+                      label={`${studyData.stepMeasurements.reduce((sum, step) => sum + step.measurements.length, 0)} pomiarów łącznie`} 
+                      variant="outlined"
+                    />
+                  </Box>
+
+                  <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                    {studyData.stepMeasurements.map((step, index) => (
+                      <Accordion key={step.stepId} defaultExpanded={index === 0}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                            <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                              {step.stepTitle}
+                            </Typography>
+                            <Chip 
+                              label={`${step.measurements.length} pomiarów`} 
+                              size="small" 
+                              color={step.measurements.length > 0 ? 'success' : 'default'}
+                            />
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          {step.measurements.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Brak skonfigurowanych pomiarów
+                            </Typography>
+                          ) : (
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Pomiar</TableCell>
+                                    <TableCell>Typ</TableCell>
+                                    <TableCell>Jednostka</TableCell>
+                                    <TableCell>Wymagany</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {step.measurements.map((measurement) => (
+                                    <TableRow key={measurement.id}>
+                                      <TableCell>
+                                        <Typography variant="body2" fontWeight={500}>
+                                          {measurement.name}
+                                        </Typography>
+                                        {measurement.description && (
+                                          <Typography variant="caption" color="text.secondary">
+                                            {measurement.description}
+                                          </Typography>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip 
+                                          label={measurement.type} 
+                                          size="small" 
+                                          variant="outlined"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        {measurement.unit || '-'}
+                                      </TableCell>
+                                      <TableCell>
+                                        {measurement.isRequired ? (
+                                          <CompleteIcon color="success" fontSize="small" />
+                                        ) : (
+                                          <Typography variant="body2" color="text.secondary">
+                                            Opcjonalny
+                                          </Typography>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          )}
+                        </AccordionDetails>
+                      </Accordion>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Podsumowanie protokołu */}
+        {protocolData && (
+          <Grid item xs={12}>
+            <Card 
+              variant="outlined"
+              sx={{ 
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.1)' : 'rgba(33, 150, 243, 0.05)',
+                border: `1px solid ${theme.palette.primary.main}20`
+              }}
+            >
+              <CardContent>
+                <Typography variant="h6" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                  <SettingsIcon sx={{ mr: 1 }} />
+                  Szczegóły Protokołu
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" gutterBottom>
+                      <strong>Standard:</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {protocolData.standard || 'Nieznany'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" gutterBottom>
+                      <strong>Poziom trudności:</strong>
+                    </Typography>
+                    <Chip 
+                      label={protocolData.difficulty || 'Nieznany'} 
+                      size="small" 
+                      color={
+                        protocolData.difficulty === 'basic' ? 'success' :
+                        protocolData.difficulty === 'intermediate' ? 'warning' : 'error'
+                      }
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" gutterBottom>
+                      <strong>Szacowany czas:</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {protocolData.estimatedDuration}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" gutterBottom>
+                      <strong>Liczba kroków:</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {protocolData.steps?.length || 0}
+                    </Typography>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
-        </Box>
-      </CardContent>
-    </Card>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Ostatnie ostrzeżenie */}
+        <Grid item xs={12}>
+          <Alert severity="info">
+            <Typography variant="body2">
+              <strong>Ważne:</strong> Po utworzeniu badania nie będzie można zmienić podstawowych ustawień protokołu i próbek. 
+              Upewnij się, że wszystkie informacje są poprawne.
+            </Typography>
+          </Alert>
+        </Grid>
+      </Grid>
+    </Box>
   );
 };

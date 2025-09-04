@@ -1,345 +1,376 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
+  Paper,
   Stepper,
   Step,
   StepLabel,
-  StepContent,
-  Button,
-  Paper,
   Typography,
+  Button,
+  useTheme,
   Container,
-  Card,
-  CardContent,
+  Alert,
   LinearProgress,
-  Chip,
-  IconButton,
-  Tooltip
+  CircularProgress,
 } from '@mui/material';
 import {
-  ArrowBack,
-  ArrowForward,
-  Save,
-  Refresh,
-  CheckCircle,
-  Warning
+  ArrowBack as ArrowBackIcon,
+  ArrowForward as ArrowForwardIcon,
+  Save as SaveIcon,
+  Science as ScienceIcon,
+  Info as InfoIcon,
+  Tune as TuneIcon,
+  Thermostat as TestIcon,
+  Schedule as SessionIcon,
+  Assessment as MeasurementIcon,
+  Person as OperatorIcon,
+  Preview as ReviewIcon,
 } from '@mui/icons-material';
-import { Toaster } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { useCreateStudy } from './hooks/useCreateStudy';
-import {
-  BasicInfoStep,
-  ProtocolSelectionStep,
-  ParametersStep,
-  SettingsStep,
-  TimelineStep,
-  ResourcesStep,
-  ReviewStep
-} from './components';
-import { CreateStudyStep } from './types';
+import { StepMeasurementsStep } from './components/StepMeasurementsStep';
+import { BasicInfoStep } from './components/BasicInfoStep';
+import { SampleConfigurationStep } from './components/SampleConfigurationStep';
+import { ProtocolSelectionStep } from './components/ProtocolSelectionStep';
+import { SessionConfigurationStep } from './components/SessionConfigurationStep';
+import { OperatorEquipmentStep } from './components/OperatorEquipmentStep';
+import { ReviewStep } from './components/ReviewStep';
+import { TestConditionsStep } from './components/TestConditionsStep';
 
-const STEP_LABELS: Record<CreateStudyStep, string> = {
-  'basic-info': 'Podstawowe informacje',
-  'protocol-selection': 'Wybór protokołu',
-  'parameters': 'Parametry',
-  'settings': 'Ustawienia',
-  'timeline': 'Harmonogram',
-  'resources': 'Zasoby',
-  'review': 'Przegląd'
+// Wszystkie komponenty kroków są już zaimplementowane
+
+const stepIcons = {
+  'protocol-selection': <ScienceIcon />,
+  'basic-info': <InfoIcon />,
+  'sample-configuration': <TuneIcon />,
+  'test-conditions': <TestIcon />,
+  'session-configuration': <SessionIcon />,
+  'step-measurements': <MeasurementIcon />,
+  'operator-equipment': <OperatorIcon />,
+  'review': <ReviewIcon />,
 };
 
-const STEP_DESCRIPTIONS: Record<CreateStudyStep, string> = {
-  'basic-info': 'Podaj nazwę, opis i cele badania',
-  'protocol-selection': 'Wybierz protokół badawczy do wykorzystania',
-  'parameters': 'Skonfiguruj parametry badania',
-  'settings': 'Ustaw warunki próbek i środowiska',
-  'timeline': 'Zaplanuj harmonogram badania',
-  'resources': 'Określ potrzebne zasoby i budżet',
-  'review': 'Sprawdź dane i utwórz badanie'
+const stepLabels = {
+  'protocol-selection': 'Wybór Protokołu',
+  'basic-info': 'Podstawowe Info',
+  'sample-configuration': 'Konfiguracja Próbek',
+  'test-conditions': 'Warunki Testowe',
+  'session-configuration': 'Konfiguracja Sesji',
+  'step-measurements': 'Pomiary dla Kroków',
+  'operator-equipment': 'Operator i Sprzęt',
+  'review': 'Przegląd',
 };
 
-const STEPS: CreateStudyStep[] = [
-  'basic-info',
-  'protocol-selection',
-  'parameters',
-  'settings',
-  'timeline',
-  'resources',
-  'review'
-];
+// Tymczasowe komponenty-placeholder
+const PlaceholderStep: React.FC<{ stepName: string }> = ({ stepName }) => (
+  <Box sx={{ textAlign: 'center', py: 8 }}>
+    <Typography variant="h5" gutterBottom>
+      {stepLabels[stepName as keyof typeof stepLabels]}
+    </Typography>
+    <Typography variant="body1" color="text.secondary">
+      Ten krok będzie zaimplementowany w następnej iteracji.
+    </Typography>
+    <Alert severity="info" sx={{ mt: 2, maxWidth: 400, mx: 'auto' }}>
+      Obecnie skupiamy się na kroku "Pomiary dla Kroków" - sercu całego systemu.
+    </Alert>
+  </Box>
+);
 
-interface CreateStudyProps {
-  initialProtocolId?: string;
-}
-
-const CreateStudy: React.FC<CreateStudyProps> = ({ initialProtocolId }) => {
-  const { protocolId } = useParams<{ protocolId?: string }>();
+const CreateStudy: React.FC = () => {
+  const theme = useTheme();
   const navigate = useNavigate();
   
   const {
-    studyData,
-    selectedProtocol,
-    errors,
-    isLoading,
     currentStep,
-    isStepValid,
+    studyData,
+    protocolData,
+    isLoading,
+    errors,
+    currentStepIndex,
+    totalSteps,
+    isFirstStep,
+    isLastStep,
     updateStudyData,
-    setSelectedProtocol,
-    validateStep,
-    nextStep,
-    previousStep,
-    goToStep,
-    submitStudy,
-    resetForm
-  } = useCreateStudy(initialProtocolId || protocolId);
+    setProtocol,
+    goToNextStep,
+    goToPreviousStep,
+    validateCurrentStep,
+    createStudy,
+    addMeasurementToStep,
+    removeMeasurementFromStep,
+    updateMeasurementInStep,
+    addSuggestedMeasurements,
+    totalMeasurements,
+    isStudyReady,
+    steps,
+  } = useCreateStudy();
 
-  const currentStepIndex = STEPS.indexOf(currentStep);
-  const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === STEPS.length - 1;
-
-  const handleStepClick = (step: CreateStudyStep) => {
-    // Pozwól przejście tylko do wcześniejszych kroków lub aktualnego
-    const stepIndex = STEPS.indexOf(step);
-    if (stepIndex <= currentStepIndex) {
-      goToStep(step);
-    }
-  };
-
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      nextStep();
+  const handleNext = async () => {
+    if (isLastStep) {
+      const result = await createStudy();
+      if (result.success) {
+        navigate(`/studies/${result.data.id}`);
+      }
+    } else if (validateCurrentStep()) {
+      goToNextStep();
     }
   };
 
   const handlePrevious = () => {
-    previousStep();
+    goToPreviousStep();
   };
 
-  const handleSubmit = async () => {
-    const success = await submitStudy();
-    if (!success) {
-      // Błąd jest już obsłużony w hooku
-    }
-  };
-
-  const handleReset = () => {
-    if (window.confirm('Czy na pewno chcesz zresetować formularz? Wszystkie wprowadzone dane zostaną utracone.')) {
-      resetForm();
-    }
-  };
-
-  const getStepProgress = () => {
-    // Tylko wymagane kroki liczymy do postępu
-    const requiredSteps: CreateStudyStep[] = ['basic-info', 'protocol-selection', 'settings', 'timeline'];
-    const completedRequiredSteps = requiredSteps.filter(step => isStepValid(step)).length;
-    return (completedRequiredSteps / requiredSteps.length) * 100;
+  const handleCancel = () => {
+    navigate('/studies');
   };
 
   const renderStepContent = () => {
+    const commonProps = {
+      studyData,
+      protocolData: protocolData || undefined,
+      errors,
+      onUpdateStudyData: updateStudyData,
+      onNext: handleNext,
+      onPrevious: handlePrevious,
+      isFirstStep,
+      isLastStep,
+      isValid: Object.keys(errors).length === 0,
+    };
+
     switch (currentStep) {
-      case 'basic-info':
-        return (
-          <BasicInfoStep
-            studyData={studyData}
-            errors={errors}
-            onUpdate={updateStudyData}
-          />
-        );
       case 'protocol-selection':
         return (
-          <ProtocolSelectionStep
-            selectedProtocol={selectedProtocol}
-            errors={errors}
-            onSelectProtocol={setSelectedProtocol}
+          <ProtocolSelectionStep 
+            {...commonProps} 
+            onSetProtocol={setProtocol} 
           />
         );
-      case 'parameters':
+      
+      case 'basic-info':
+        return <BasicInfoStep {...commonProps} />;
+      
+      case 'sample-configuration':
+        return <SampleConfigurationStep {...commonProps} />;
+      
+      case 'test-conditions':
+        return <TestConditionsStep {...commonProps} />;
+      
+      case 'session-configuration':
+        return <SessionConfigurationStep {...commonProps} />;
+      
+      case 'step-measurements':
         return (
-          <ParametersStep
-            studyData={studyData}
-            errors={errors}
-            onUpdate={updateStudyData}
+          <StepMeasurementsStep 
+            {...commonProps}
+            protocolData={protocolData || undefined}
+            onAddMeasurement={addMeasurementToStep}
+            onRemoveMeasurement={removeMeasurementFromStep}
+            onUpdateMeasurement={updateMeasurementInStep}
+            onAddSuggestedMeasurements={addSuggestedMeasurements}
           />
         );
-      case 'settings':
-        return (
-          <SettingsStep
-            studyData={studyData}
-            errors={errors}
-            onUpdate={updateStudyData}
-          />
-        );
-      case 'timeline':
-        return (
-          <TimelineStep
-            studyData={studyData}
-            errors={errors}
-            onUpdate={updateStudyData}
-          />
-        );
-      case 'resources':
-        return (
-          <ResourcesStep
-            studyData={studyData}
-            errors={errors}
-            onUpdate={updateStudyData}
-          />
-        );
+      
+      case 'operator-equipment':
+        return <OperatorEquipmentStep {...commonProps} />;
+      
       case 'review':
-        return (
-          <ReviewStep
-            studyData={studyData}
-            selectedProtocol={selectedProtocol}
-            isStepValid={(step: string) => isStepValid(step as CreateStudyStep)}
-          />
-        );
+        return <ReviewStep {...commonProps} />;
+      
       default:
         return null;
     }
   };
 
+  const progress = ((currentStepIndex + 1) / totalSteps) * 100;
+
   return (
-    <Container maxWidth="lg">
-      <Toaster position="top-right" />
-      
-      <Box py={3}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Container maxWidth="xl" sx={{ flex: 1, py: 4, pb: 12 }}>
+        <Paper
+          elevation={2}
+          sx={{
+            p: 4,
+            backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'background.paper',
+            minHeight: '85vh',
+          }}
+        >
         {/* Header */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Box>
-                <Typography variant="h4" component="h1" gutterBottom>
-                  Tworzenie nowego badania
-                </Typography>
-                <Typography variant="subtitle1" color="text.secondary">
-                  {STEP_DESCRIPTIONS[currentStep]}
-                </Typography>
-              </Box>
-              
-              <Box display="flex" alignItems="center" gap={2}>
-                <Tooltip title="Resetuj formularz">
-                  <IconButton onClick={handleReset} color="secondary">
-                    <Refresh />
-                  </IconButton>
-                </Tooltip>
-                
-                <Button
-                  variant="outlined"
-                  startIcon={<ArrowBack />}
-                  onClick={() => navigate('/studies')}
-                >
-                  Powrót do listy
-                </Button>
-              </Box>
-            </Box>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Utwórz Nowe Studium
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            Skonfiguruj wszystkie parametry dla nowego studium badawczego z pomiarami per krok protokołu.
+          </Typography>
+          
+          {/* Progress Bar */}
+          <Box sx={{ mt: 3, mb: 2 }}>
+            <LinearProgress 
+              variant="determinate" 
+              value={progress}
+              sx={{ 
+                height: 8, 
+                borderRadius: 4,
+                backgroundColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              Krok {currentStepIndex + 1} z {totalSteps} ({Math.round(progress)}%)
+              {totalMeasurements > 0 && ` • ${totalMeasurements} pomiarów skonfigurowanych`}
+            </Typography>
+          </Box>
+        </Box>
 
-            {/* Progress */}
-            <Box mb={2}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                <Typography variant="body2" color="text.secondary">
-                  Postęp: {currentStepIndex + 1} z {STEPS.length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {Math.round(getStepProgress())}% ukończone
-                </Typography>
-              </Box>
-              <LinearProgress 
-                variant="determinate" 
-                value={getStepProgress()} 
-                sx={{ height: 8, borderRadius: 4 }}
-              />
-            </Box>
-
-            {/* Step indicator chips */}
-            <Box display="flex" gap={1} flexWrap="wrap">
-              {STEPS.map((step, index) => (
-                <Chip
-                  key={step}
-                  label={STEP_LABELS[step]}
-                  variant={step === currentStep ? 'filled' : 'outlined'}
-                  color={
-                    step === currentStep ? 'primary' :
-                    isStepValid(step) ? 'success' : 'default'
-                  }
-                  icon={
-                    isStepValid(step) ? <CheckCircle /> :
-                    index <= currentStepIndex ? <Warning /> : undefined
-                  }
-                  onClick={() => handleStepClick(step)}
+        {/* Stepper */}
+        <Stepper 
+          activeStep={currentStepIndex} 
+          alternativeLabel
+          sx={{ 
+            mb: 4,
+            '& .MuiStepLabel-root': {
+              cursor: 'pointer',
+            },
+          }}
+        >
+          {steps.map((step, index) => (
+            <Step key={step}>
+              <StepLabel
+                StepIconComponent={() => (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      backgroundColor: index <= currentStepIndex 
+                        ? theme.palette.primary.main 
+                        : theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                      color: index <= currentStepIndex 
+                        ? theme.palette.primary.contrastText 
+                        : theme.palette.text.secondary,
+                      transition: 'all 0.2s ease-in-out',
+                      // Highlight the measurements step
+                      border: step === 'step-measurements' ? `2px solid ${theme.palette.success.main}` : 'none',
+                    }}
+                  >
+                    {stepIcons[step]}
+                  </Box>
+                )}
+              >
+                <Typography 
+                  variant="caption" 
                   sx={{ 
-                    cursor: index <= currentStepIndex ? 'pointer' : 'default',
-                    opacity: index <= currentStepIndex ? 1 : 0.6
+                    fontWeight: index === currentStepIndex ? 600 : 400,
+                    color: index === currentStepIndex 
+                      ? theme.palette.primary.main 
+                      : step === 'step-measurements'
+                      ? theme.palette.success.main
+                      : theme.palette.text.secondary,
                   }}
-                />
+                >
+                  {stepLabels[step]}
+                </Typography>
+              </StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+
+        {/* Error Alert */}
+        {Object.keys(errors).length > 0 && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              Proszę poprawić następujące błędy:
+            </Typography>
+            <ul style={{ margin: '8px 0 0 20px' }}>
+              {Object.entries(errors).map(([field, fieldErrors]) => (
+                <li key={field}>
+                  {fieldErrors.join(', ')}
+                </li>
               ))}
-            </Box>
-          </CardContent>
-        </Card>
+            </ul>
+          </Alert>
+        )}
 
         {/* Step Content */}
-        <Box mb={3}>
+        <Box sx={{ minHeight: '400px', mb: 4 }}>
           {renderStepContent()}
         </Box>
 
-        {/* Navigation */}
-        <Paper sx={{ p: 3 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+        {/* Footer info */}
+        <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary" display="block">
+            💡 <strong>Tip:</strong> Krok "Pomiary dla Kroków" pozwala zdefiniować jakie konkretne dane 
+            będą zbierane podczas wykonywania każdego kroku protokołu w sesji badawczej.
+          </Typography>
+          {protocolData && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              📋 <strong>Protokół:</strong> {protocolData.title} • 
+              <strong> Kategoria:</strong> {protocolData.category} • 
+              <strong> Czas:</strong> {protocolData.estimatedDuration}
+            </Typography>
+          )}
+        </Box>
+      </Paper>
+      </Container>
+
+      {/* Sticky Footer with Navigation */}
+      <Paper
+        elevation={3}
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          p: 2,
+          backgroundColor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Container maxWidth="xl">
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Button
-              onClick={handlePrevious}
-              disabled={isFirstStep || isLoading}
-              startIcon={<ArrowBack />}
+              onClick={handleCancel}
               variant="outlined"
+              color="secondary"
+              sx={{ minWidth: 120 }}
             >
-              Poprzedni
+              Anuluj
             </Button>
-
-            <Box display="flex" alignItems="center" gap={2}>
-              {currentStep === 'review' && (
-                <Chip
-                  label={
-                    STEPS.every(step => isStepValid(step)) 
-                      ? 'Gotowe do utworzenia' 
-                      : 'Sprawdź wymagane pola'
-                  }
-                  color={
-                    STEPS.every(step => isStepValid(step)) 
-                      ? 'success' 
-                      : 'warning'
-                  }
-                  icon={
-                    STEPS.every(step => isStepValid(step)) 
-                      ? <CheckCircle /> 
-                      : <Warning />
-                  }
-                />
-              )}
-            </Box>
-
-            {isLastStep ? (
+            
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
-                onClick={handleSubmit}
-                disabled={isLoading || !STEPS.every(step => isStepValid(step))}
-                startIcon={<Save />}
-                variant="contained"
-                size="large"
+                onClick={handlePrevious}
+                disabled={isFirstStep}
+                variant="outlined"
+                sx={{ minWidth: 120 }}
               >
-                {isLoading ? 'Tworzenie...' : 'Utwórz badanie'}
+                Wstecz
               </Button>
-            ) : (
+              
               <Button
                 onClick={handleNext}
-                disabled={!isStepValid(currentStep) || isLoading}
-                endIcon={<ArrowForward />}
                 variant="contained"
+                disabled={isLoading}
+                sx={{ minWidth: 120 }}
               >
-                Następny
+                {isLoading ? (
+                  <CircularProgress size={20} />
+                ) : isLastStep ? (
+                  'Zakończ'
+                ) : (
+                  'Dalej'
+                )}
               </Button>
-            )}
+            </Box>
           </Box>
-        </Paper>
-      </Box>
-    </Container>
+        </Container>
+      </Paper>
+    </Box>
   );
 };
 
-export default CreateStudy;
+export { CreateStudy };

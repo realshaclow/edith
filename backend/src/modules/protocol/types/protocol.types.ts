@@ -1,0 +1,92 @@
+// Protocol Types - zgodne z Prisma enumami
+export enum ProtocolCategory {
+  PHYSICAL = 'PHYSICAL',
+  CHEMICAL = 'CHEMICAL', 
+  THERMAL = 'THERMAL',
+  MECHANICAL = 'MECHANICAL',
+  FIRE = 'FIRE',
+  WEATHERING = 'WEATHERING',
+  RHEOLOGICAL = 'RHEOLOGICAL'
+}
+
+export enum ProtocolDifficulty {
+  BASIC = 'BASIC',
+  INTERMEDIATE = 'INTERMEDIATE', 
+  ADVANCED = 'ADVANCED'
+}
+
+export enum ProtocolType {
+  PREDEFINED = 'PREDEFINED',
+  USER = 'USER'
+}
+
+export enum ConditionCategory {
+  ENVIRONMENTAL = 'ENVIRONMENTAL',
+  MECHANICAL = 'MECHANICAL',
+  CHEMICAL = 'CHEMICAL',
+  TEMPORAL = 'TEMPORAL',
+  DIMENSIONAL = 'DIMENSIONAL'
+}
+
+export enum CalculationCategory {
+  MECHANICAL = 'MECHANICAL',
+  STATISTICAL = 'STATISTICAL',
+  DIMENSIONAL = 'DIMENSIONAL',
+  CHEMICAL = 'CHEMICAL',
+  THERMAL = 'THERMAL',
+  CUSTOM = 'CUSTOM'
+}
+
+export enum ValueCategory {
+  MECHANICAL = 'MECHANICAL',
+  THERMAL = 'THERMAL',
+  ELECTRICAL = 'ELECTRICAL',
+  CHEMICAL = 'CHEMICAL',
+  DIMENSIONAL = 'DIMENSIONAL',
+  OPTICAL = 'OPTICAL'
+}
+
+export enum AcceptanceCategory {
+  PERFORMANCE = 'PERFORMANCE',
+  QUALITY = 'QUALITY',
+  SAFETY = 'SAFETY',
+  DIMENSIONAL = 'DIMENSIONAL',
+  STATISTICAL = 'STATISTICAL'
+}
+
+export enum AcceptanceSeverity {
+  CRITICAL = 'CRITICAL',
+  MAJOR = 'MAJOR',
+  MINOR = 'MINOR'
+}
+
+export enum AcceptanceOperator {
+  GREATER_THAN = 'GREATER_THAN',
+  LESS_THAN = 'LESS_THAN',
+  EQUAL = 'EQUAL',
+  GREATER_EQUAL = 'GREATER_EQUAL',
+  LESS_EQUAL = 'LESS_EQUAL',
+  BETWEEN = 'BETWEEN',
+  NOT_EQUAL = 'NOT_EQUAL'
+}
+
+export enum IssueSeverity {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL'
+}
+
+export enum DataPointType {
+  MEASUREMENT = 'MEASUREMENT',
+  OBSERVATION = 'OBSERVATION',
+  CALCULATION = 'CALCULATION',
+  CONDITION = 'CONDITION'
+}
+
+export enum DataType {
+  NUMBER = 'NUMBER',
+  TEXT = 'TEXT',
+  BOOLEAN = 'BOOLEAN',
+  DATE = 'DATE'
+}

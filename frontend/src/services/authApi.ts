@@ -85,13 +85,29 @@ authApi.interceptors.response.use(
 // Real API calls
 export const realAuthApi = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    const response = await authApi.post<AuthResponse>('/auth/login', credentials);
-    return response.data;
+    const response = await authApi.post('/auth/login', credentials);
+    const { data } = response.data; // Backend returns { success: true, data: {...} }
+    
+    return {
+      user: data.user,
+      accessToken: data.tokens.accessToken,
+      refreshToken: data.tokens.refreshToken,
+      expiresIn: data.tokens.expiresIn,
+      tokenType: 'Bearer'
+    };
   },
 
   register: async (data: RegisterData): Promise<AuthResponse> => {
-    const response = await authApi.post<AuthResponse>('/auth/register', data);
-    return response.data;
+    const response = await authApi.post('/auth/register', data);
+    const { data: responseData } = response.data; // Backend returns { success: true, data: {...} }
+    
+    return {
+      user: responseData.user,
+      accessToken: responseData.tokens.accessToken,
+      refreshToken: responseData.tokens.refreshToken,
+      expiresIn: responseData.tokens.expiresIn,
+      tokenType: 'Bearer'
+    };
   },
 
   logout: async (): Promise<void> => {
@@ -114,10 +130,18 @@ export const realAuthApi = {
       throw new Error('No refresh token available');
     }
     
-    const response = await authApi.post<AuthResponse>('/auth/refresh-token', {
+    const response = await authApi.post('/auth/refresh-token', {
       refreshToken
     });
-    return response.data;
+    const { data } = response.data; // Backend returns { success: true, data: {...} }
+    
+    return {
+      user: data.user,
+      accessToken: data.tokens.accessToken,
+      refreshToken: data.tokens.refreshToken,
+      expiresIn: data.tokens.expiresIn,
+      tokenType: 'Bearer'
+    };
   },
 
   forgotPassword: async (data: PasswordResetRequest): Promise<{ success: boolean; message: string }> => {
@@ -146,7 +170,7 @@ export const realAuthApi = {
   },
 
   getCurrentUser: async (): Promise<User> => {
-    const response = await authApi.get<{ success: boolean; data: User }>('/auth/me');
+    const response = await authApi.get<{ success: boolean; data: User }>('/auth/profile');
     return response.data.data;
   },
 

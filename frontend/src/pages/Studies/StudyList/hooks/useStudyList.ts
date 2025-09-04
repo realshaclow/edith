@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Study, StudyStatus } from '../../../../types';
+import { StudyDto } from '../../../../services/studiesApi';
 import { useStudies } from '../../../../hooks';
+
+// Converter function to convert StudyDto to Study for backward compatibility
+const convertStudyDtoToStudy = (studyDto: StudyDto): Study => {
+  // Map the new status values to the old enum
+  const statusMapping: Record<string, StudyStatus> = {
+    'DRAFT': StudyStatus.DRAFT,
+    'ACTIVE': StudyStatus.ACTIVE,
+    'COMPLETED': StudyStatus.COMPLETED,
+    'PAUSED': StudyStatus.PAUSED,
+    'ARCHIVED': StudyStatus.PAUSED, // Map ARCHIVED to PAUSED for compatibility
+    'DELETED': StudyStatus.PAUSED, // Map DELETED to PAUSED for compatibility
+  };
+
+  return {
+    ...studyDto,
+    name: studyDto.title, // Backend already maps database 'name' to DTO 'title'
+    title: studyDto.title, // Ensure title is also available for components
+    status: statusMapping[studyDto.status] || StudyStatus.DRAFT,
+    sessions: [], // Sessions need to be fetched separately in the new API
+  };
+};
 import {
   StudyListViewMode,
   StudyFilterOptions,
@@ -81,11 +103,15 @@ export const useStudyList = (options: UseStudyListOptions = {}) => {
   const [notifications, setNotifications] = useState<StudyListNotification[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Computed values
+  // Computed values - convert StudyDto to Study for compatibility
+  const convertedStudies = useMemo(() => {
+    return studies.map(convertStudyDtoToStudy);
+  }, [studies]);
+
   const filteredStudies = useMemo(() => {
-    const filtered = filterStudies(studies, filters);
+    const filtered = filterStudies(convertedStudies, filters);
     return sortStudies(filtered, viewConfig.sortBy, viewConfig.sortOrder);
-  }, [studies, filters, viewConfig.sortBy, viewConfig.sortOrder]);
+  }, [convertedStudies, filters, viewConfig.sortBy, viewConfig.sortOrder]);
 
   const groupedStudies = useMemo(() => {
     if (viewConfig.groupBy) {
@@ -101,8 +127,8 @@ export const useStudyList = (options: UseStudyListOptions = {}) => {
   }, [filteredStudies, currentPage, viewConfig.itemsPerPage]);
 
   const stats = useMemo(() => {
-    return calculateStudyStats(studies);
-  }, [studies]);
+    return calculateStudyStats(convertedStudies);
+  }, [convertedStudies]);
 
   const totalPages = Math.ceil(filteredStudies.length / viewConfig.itemsPerPage);
 
@@ -223,13 +249,13 @@ export const useStudyList = (options: UseStudyListOptions = {}) => {
         return;
       }
 
-      // Ensure required fields are present
+      // Ensure required fields are present for CreateStudyDto
       const studyToCreate = {
-        name: duplicatedData.name!,
+        title: duplicatedData.name!,
         description: duplicatedData.description || '',
         protocolId: duplicatedData.protocolId || study.protocolId || '',
-        category: duplicatedData.category || '',
-        settings: duplicatedData.settings || {}
+        settings: duplicatedData.settings || {},
+        dataCollectionSteps: [] // Required field for new API
       };
 
       await createStudy(studyToCreate);

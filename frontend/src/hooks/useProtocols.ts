@@ -1,248 +1,569 @@
-import { useState, useEffect, useCallback } from 'react';
-import { protocolsApi } from '../services/api';
-import { ApiResponse } from '../types';
-
-// Protocol types matching backend
-export interface Protocol {
-  id: string;
-  title: string;
-  description?: string;
-  category: 'mechanical' | 'chemical' | 'physical' | 'thermal' | 'electrical';
-  estimatedDuration?: string;
-  difficulty: 'basic' | 'intermediate' | 'advanced';
-  overview: {
-    purpose: string;
-    scope: string;
-    principles: string;
-    standards: string[];
-  };
-  equipment: Array<{
-    name: string;
-    specification: string;
-  }>;
-  materials: string[];
-  safetyGuidelines: string[];
-  testConditions: Array<{
-    id: string;
-    name: string;
-    value: string;
-    unit: string;
-    tolerance: string;
-    category: 'environmental' | 'mechanical' | 'chemical' | 'temporal' | 'dimensional';
-    required: boolean;
-    description?: string;
-  }>;
-  steps: Array<{
-    id: string;
-    title: string;
-    description: string;
-    duration: string;
-    instructions: string[];
-    tips: string[];
-    safety: string[];
-  }>;
-  calculations: Array<{
-    id: string;
-    name: string;
-    description: string;
-    formula: string;
-    variables: Array<{
-      symbol: string;
-      name: string;
-      unit: string;
-    }>;
-    unit: string;
-    category: 'mechanical' | 'statistical' | 'dimensional' | 'chemical' | 'custom';
-    isRequired: boolean;
-    example?: string;
-    notes?: string;
-  }>;
-  acceptanceCriteria: Array<{
-    id: string;
-    parameter: string;
-    condition: string;
-    value: string;
-    unit: string;
-    severity: 'critical' | 'major' | 'minor';
-    description?: string;
-  }>;
-  commonIssues: Array<{
-    id: string;
-    issue: string;
-    causes: string[];
-    solutions: string[];
-    prevention?: string;
-  }>;
-  typicalValues: Array<{
-    material: string;
-    property: string;
-    value: string;
-    unit: string;
-    conditions: string;
-    source?: string;
-  }>;
-  references: Array<{
-    title: string;
-    source: string;
-    url?: string;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-}
-
-export interface CreateProtocolRequest {
-  title: string;
-  description?: string;
-  category: Protocol['category'];
-  estimatedDuration?: string;
-  difficulty: Protocol['difficulty'];
-  overview: Protocol['overview'];
-  equipment: Protocol['equipment'];
-  materials: Protocol['materials'];
-  safetyGuidelines: Protocol['safetyGuidelines'];
-  testConditions: Protocol['testConditions'];
-  steps: Protocol['steps'];
-  calculations: Protocol['calculations'];
-  acceptanceCriteria: Protocol['acceptanceCriteria'];
-  commonIssues: Protocol['commonIssues'];
-  typicalValues: Protocol['typicalValues'];
-  references: Protocol['references'];
-}
+import { useState, useCallback } from 'react';
+import { protocolsApi, ProtocolDto, CreateProtocolDto, UpdateProtocolDto, ProtocolQueryParams, ProtocolTemplateDto } from '../services/protocolsApi';
 
 export interface UseProtocolsReturn {
-  protocols: Protocol[];
-  protocol: Protocol | null;
-  isLoading: boolean;
+  protocols: ProtocolDto[];
+  protocol: ProtocolDto | null;
+  templates: ProtocolTemplateDto[];
+  loading: boolean;
+  isLoading: boolean; // Alias for loading for backward compatibility
   error: string | null;
-  fetchProtocols: () => Promise<void>;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null;
+
+  // Protocol operations
+  fetchProtocols: (params?: ProtocolQueryParams) => Promise<void>;
   fetchProtocol: (id: string) => Promise<void>;
-  createProtocol: (protocol: CreateProtocolRequest) => Promise<Protocol | null>;
-  updateProtocol: (id: string, updates: Partial<CreateProtocolRequest>) => Promise<Protocol | null>;
+  createProtocol: (data: CreateProtocolDto) => Promise<ProtocolDto | null>;
+  updateProtocol: (id: string, data: UpdateProtocolDto) => Promise<ProtocolDto | null>;
   deleteProtocol: (id: string) => Promise<boolean>;
+  clearProtocol: () => void;
+
+  // Template operations
+  fetchTemplates: () => Promise<void>;
+  createFromTemplate: (templateId: string, data: Partial<CreateProtocolDto>) => Promise<ProtocolDto | null>;
+
+  // Version operations
+  getVersions: (protocolId: string) => Promise<ProtocolDto[]>;
+  duplicateProtocol: (id: string, newTitle: string, newVersion: string) => Promise<ProtocolDto | null>;
+
+  // Validation and status
+  validateProtocol: (id: string) => Promise<any>;
+  updateStatus: (id: string, status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED', comment?: string) => Promise<ProtocolDto | null>;
+
+  // Search and recommendations
+  searchProtocols: (query: string, filters?: ProtocolQueryParams) => Promise<void>;
+  getRecommendations: (baseProtocolId?: string, category?: string) => Promise<ProtocolDto[]>;
+
+  // Bulk operations
+  bulkDeleteProtocols: (protocolIds: string[]) => Promise<boolean>;
+  bulkUpdateStatus: (protocolIds: string[], status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED') => Promise<boolean>;
+
+  // Import/Export
+  exportProtocol: (protocolId: string, format?: 'json' | 'pdf' | 'docx') => Promise<any>;
+  importProtocol: (data: any) => Promise<ProtocolDto | null>;
+
+  // Categories and stats
+  getCategories: () => Promise<string[]>;
+  getTags: () => Promise<string[]>;
+  getStats: () => Promise<any>;
+
+  // Clear error
   clearError: () => void;
 }
 
 export const useProtocols = (): UseProtocolsReturn => {
-  const [protocols, setProtocols] = useState<Protocol[]>([]);
-  const [protocol, setProtocol] = useState<Protocol | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [protocols, setProtocols] = useState<ProtocolDto[]>([]);
+  const [protocol, setProtocol] = useState<ProtocolDto | null>(null);
+  const [templates, setTemplates] = useState<ProtocolTemplateDto[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<{
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  } | null>(null);
+
+  // Helper function to handle errors
+  const handleError = useCallback((error: any, operation: string) => {
+    console.error(`Error in ${operation}:`, error);
+    const message = error?.response?.data?.error || error?.message || `Failed to ${operation}`;
+    setError(message);
+  }, []);
 
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  const fetchProtocols = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // Protocol operations
+  const fetchProtocols = useCallback(async (params?: ProtocolQueryParams) => {
     try {
-      const response: ApiResponse<Protocol[]> = await protocolsApi.getAll();
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getAll(params);
+      
       if (response.success && response.data) {
         setProtocols(response.data);
+        if (response.pagination) {
+          setPagination(response.pagination);
+        }
       } else {
-        setError(response.error || 'Błąd podczas pobierania protokołów');
+        throw new Error(response.error || 'Failed to fetch protocols');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'fetch protocols');
+      setProtocols([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
   const fetchProtocol = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
     try {
-      const response: ApiResponse<Protocol> = await protocolsApi.getById(id);
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getById(id);
+      
       if (response.success && response.data) {
         setProtocol(response.data);
       } else {
-        setError(response.error || 'Błąd podczas pobierania protokołu');
+        throw new Error(response.error || 'Failed to fetch protocol');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'fetch protocol');
+      setProtocol(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const createProtocol = useCallback(async (protocolData: CreateProtocolRequest): Promise<Protocol | null> => {
-    setIsLoading(true);
-    setError(null);
+  const createProtocol = useCallback(async (data: CreateProtocolDto): Promise<ProtocolDto | null> => {
     try {
-      const response: ApiResponse<Protocol> = await protocolsApi.create(protocolData);
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.create(data);
+      
       if (response.success && response.data) {
-        setProtocols(prev => [...prev, response.data!]);
+        // Add to protocols list if we have one
+        setProtocols(prev => [response.data!, ...prev]);
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas tworzenia protokołu');
-        return null;
+        throw new Error(response.error || 'Failed to create protocol');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'create protocol');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [handleError]);
 
-  const updateProtocol = useCallback(async (id: string, updates: Partial<CreateProtocolRequest>): Promise<Protocol | null> => {
-    setIsLoading(true);
-    setError(null);
+  const updateProtocol = useCallback(async (id: string, data: UpdateProtocolDto): Promise<ProtocolDto | null> => {
     try {
-      const response: ApiResponse<Protocol> = await protocolsApi.update(id, updates);
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.update(id, data);
+      
       if (response.success && response.data) {
-        setProtocols(prev => prev.map(p => p.id === id ? response.data! : p));
+        // Update in protocols list
+        setProtocols(prev => prev.map(protocol => 
+          protocol.id === id ? response.data! : protocol
+        ));
+        
+        // Update current protocol if it's the same one
         if (protocol?.id === id) {
           setProtocol(response.data);
         }
+        
         return response.data;
       } else {
-        setError(response.error || 'Błąd podczas aktualizacji protokołu');
-        return null;
+        throw new Error(response.error || 'Failed to update protocol');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'update protocol');
       return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [protocol]);
+  }, [handleError, protocol?.id]);
 
   const deleteProtocol = useCallback(async (id: string): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
     try {
-      const response: ApiResponse = await protocolsApi.delete(id);
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.delete(id);
+      
       if (response.success) {
-        setProtocols(prev => prev.filter(p => p.id !== id));
+        // Remove from protocols list
+        setProtocols(prev => prev.filter(protocol => protocol.id !== id));
+        
+        // Clear current protocol if it's the same one
         if (protocol?.id === id) {
           setProtocol(null);
         }
+        
         return true;
       } else {
-        setError(response.error || 'Błąd podczas usuwania protokołu');
-        return false;
+        throw new Error(response.error || 'Failed to delete protocol');
       }
-    } catch (err) {
-      setError('Błąd połączenia z serwerem');
+    } catch (error) {
+      handleError(error, 'delete protocol');
       return false;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [protocol]);
+  }, [handleError, protocol?.id]);
+
+  const clearProtocol = useCallback(() => {
+    setProtocol(null);
+  }, []);
+
+  // Template operations
+  const fetchTemplates = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getTemplates();
+      
+      if (response.success && response.data) {
+        setTemplates(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to fetch templates');
+      }
+    } catch (error) {
+      handleError(error, 'fetch templates');
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const createFromTemplate = useCallback(async (templateId: string, data: Partial<CreateProtocolDto>): Promise<ProtocolDto | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.createFromTemplate(templateId, data);
+      
+      if (response.success && response.data) {
+        setProtocols(prev => [response.data!, ...prev]);
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to create protocol from template');
+      }
+    } catch (error) {
+      handleError(error, 'create protocol from template');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Version operations
+  const getVersions = useCallback(async (protocolId: string): Promise<ProtocolDto[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getVersions(protocolId);
+      
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch versions');
+      }
+    } catch (error) {
+      handleError(error, 'fetch versions');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const duplicateProtocol = useCallback(async (id: string, newTitle: string, newVersion: string): Promise<ProtocolDto | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.duplicate(id, newTitle, newVersion);
+      
+      if (response.success && response.data) {
+        setProtocols(prev => [response.data!, ...prev]);
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to duplicate protocol');
+      }
+    } catch (error) {
+      handleError(error, 'duplicate protocol');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Validation and status
+  const validateProtocol = useCallback(async (id: string): Promise<any> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.validate(id);
+      
+      if (response.success) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to validate protocol');
+      }
+    } catch (error) {
+      handleError(error, 'validate protocol');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const updateStatus = useCallback(async (id: string, status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED', comment?: string): Promise<ProtocolDto | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.updateStatus(id, status, comment);
+      
+      if (response.success && response.data) {
+        // Update in protocols list
+        setProtocols(prev => prev.map(protocol => 
+          protocol.id === id ? response.data! : protocol
+        ));
+        
+        // Update current protocol if it's the same one
+        if (protocol?.id === id) {
+          setProtocol(response.data);
+        }
+        
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to update status');
+      }
+    } catch (error) {
+      handleError(error, 'update status');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError, protocol?.id]);
+
+  // Search and recommendations
+  const searchProtocols = useCallback(async (query: string, filters?: ProtocolQueryParams) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.search(query, filters);
+      
+      if (response.success && response.data) {
+        setProtocols(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to search protocols');
+      }
+    } catch (error) {
+      handleError(error, 'search protocols');
+      setProtocols([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const getRecommendations = useCallback(async (baseProtocolId?: string, category?: string): Promise<ProtocolDto[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getRecommendations(baseProtocolId, category);
+      
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to get recommendations');
+      }
+    } catch (error) {
+      handleError(error, 'get recommendations');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Bulk operations
+  const bulkDeleteProtocols = useCallback(async (protocolIds: string[]): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.bulkDelete(protocolIds);
+      
+      if (response.success) {
+        // Remove from protocols list
+        setProtocols(prev => prev.filter(protocol => !protocolIds.includes(protocol.id)));
+        
+        // Clear current protocol if it's one of the deleted ones
+        if (protocol && protocolIds.includes(protocol.id)) {
+          setProtocol(null);
+        }
+        
+        return true;
+      } else {
+        throw new Error(response.error || 'Failed to delete protocols');
+      }
+    } catch (error) {
+      handleError(error, 'bulk delete protocols');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError, protocol]);
+
+  const bulkUpdateStatus = useCallback(async (protocolIds: string[], status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.bulkUpdateStatus(protocolIds, status);
+      
+      if (response.success) {
+        // For simplicity, refetch all protocols to get updated statuses
+        // In a real app, you'd probably want to update them locally
+        return true;
+      } else {
+        throw new Error(response.error || 'Failed to update protocol statuses');
+      }
+    } catch (error) {
+      handleError(error, 'bulk update status');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Import/Export
+  const exportProtocol = useCallback(async (protocolId: string, format: 'json' | 'pdf' | 'docx' = 'json'): Promise<any> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const data = await protocolsApi.export(protocolId, format);
+      return data;
+    } catch (error) {
+      handleError(error, 'export protocol');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const importProtocol = useCallback(async (data: any): Promise<ProtocolDto | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.import(data);
+      
+      if (response.success && response.data) {
+        setProtocols(prev => [response.data!, ...prev]);
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to import protocol');
+      }
+    } catch (error) {
+      handleError(error, 'import protocol');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  // Categories and stats
+  const getCategories = useCallback(async (): Promise<string[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getCategories();
+      
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch categories');
+      }
+    } catch (error) {
+      handleError(error, 'fetch categories');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const getTags = useCallback(async (): Promise<string[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getTags();
+      
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch tags');
+      }
+    } catch (error) {
+      handleError(error, 'fetch tags');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
+
+  const getStats = useCallback(async (): Promise<any> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await protocolsApi.getStats();
+      
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch stats');
+      }
+    } catch (error) {
+      handleError(error, 'fetch stats');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [handleError]);
 
   return {
     protocols,
     protocol,
-    isLoading,
+    templates,
+    loading,
+    isLoading: loading, // Alias for backward compatibility
     error,
+    pagination,
     fetchProtocols,
     fetchProtocol,
     createProtocol,
     updateProtocol,
     deleteProtocol,
-    clearError
+    clearProtocol,
+    fetchTemplates,
+    createFromTemplate,
+    getVersions,
+    duplicateProtocol,
+    validateProtocol,
+    updateStatus,
+    searchProtocols,
+    getRecommendations,
+    bulkDeleteProtocols,
+    bulkUpdateStatus,
+    exportProtocol,
+    importProtocol,
+    getCategories,
+    getTags,
+    getStats,
+    clearError,
   };
 };
+
+export default useProtocols;

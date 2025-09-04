@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { ResearchProtocols } from '../src/data/research-protocols';
+import { ResearchProtocols } from '../src/modules/protocol/data/research-protocols';
 import { hashPassword } from '../src/auth/utils/password';
 
 const prisma = new PrismaClient();
@@ -141,6 +141,103 @@ async function seedOperator() {
   return operator;
 }
 
+async function seedAdditionalUsers() {
+  console.log('👥 Creating additional lab users...');
+
+  const additionalUsers = [
+    {
+      email: 'piotr.wisniewski@lab.com',
+      username: 'p.wisniewski',
+      firstName: 'Piotr',
+      lastName: 'Wiśniewski',
+      title: 'Inż.',
+      department: 'Laboratorium Chemiczne',
+      position: 'Technik Laboratoryjny',
+      role: 'OPERATOR' as const
+    },
+    {
+      email: 'maria.zielinska@lab.com',
+      username: 'm.zielinska',
+      firstName: 'Maria',
+      lastName: 'Zielińska',
+      title: 'Prof. dr hab.',
+      department: 'Laboratorium Badawcze',
+      position: 'Dyrektor Naukowy',
+      role: 'RESEARCHER' as const
+    },
+    {
+      email: 'tomasz.kowalczyk@lab.com',
+      username: 't.kowalczyk',
+      firstName: 'Tomasz',
+      lastName: 'Kowalczyk',
+      title: 'Mgr inż.',
+      department: 'Laboratorium Materiałów',
+      position: 'Specjalista ds. Badań',
+      role: 'RESEARCHER' as const
+    },
+    {
+      email: 'katarzyna.nowacka@lab.com',
+      username: 'k.nowacka',
+      firstName: 'Katarzyna',
+      lastName: 'Nowacka',
+      title: 'Dr inż.',
+      department: 'Laboratorium Materiałów',
+      position: 'Kierownik Laboratorium',
+      role: 'RESEARCHER' as const
+    },
+    {
+      email: 'maciej.jankowski@lab.com',
+      username: 'm.jankowski',
+      firstName: 'Maciej',
+      lastName: 'Jankowski',
+      title: 'Inż.',
+      department: 'Laboratorium Mechaniczne',
+      position: 'Technik',
+      role: 'OPERATOR' as const
+    },
+    {
+      email: 'agnieszka.wojcik@lab.com',
+      username: 'a.wojcik',
+      firstName: 'Agnieszka',
+      lastName: 'Wójcik',
+      title: 'Mgr',
+      department: 'Laboratorium Analityczne',
+      position: 'Analityk',
+      role: 'OPERATOR' as const
+    }
+  ];
+
+  const userPassword = 'User123!';
+  const hashedPassword = await hashPassword(userPassword);
+
+  for (const userData of additionalUsers) {
+    const existingUser = await prisma.user.findFirst({
+      where: { email: userData.email }
+    });
+
+    if (existingUser) {
+      console.log(`⏭️ User ${userData.email} already exists`);
+      continue;
+    }
+
+    await prisma.user.create({
+      data: {
+        ...userData,
+        passwordHash: hashedPassword,
+        affiliation: 'Laboratorium Badawcze',
+        isActive: true,
+        isVerified: true,
+        language: 'pl',
+        timezone: 'Europe/Warsaw'
+      }
+    });
+
+    console.log(`✅ User ${userData.email} created successfully`);
+  }
+
+  return additionalUsers;
+}
+
 async function seedProtocols() {
   console.log('📋 Seeding predefined protocols...');
 
@@ -265,9 +362,9 @@ async function seedProtocols() {
           },
           commonIssues: {
             create: protocolData.commonIssues?.map((ci: any, index: number) => ({
-              issue: ci.problem || ci.issue || '',
-              cause: ci.cause || '',
-              solution: ci.solution || '',
+              problem: ci.problem || ci.issue || '',
+              causes: ci.causes ? ci.causes : [ci.cause || ''],
+              solutions: ci.solutions ? ci.solutions : [ci.solution || ''],
               severity: (ci.severity || 'MEDIUM').toUpperCase(),
               frequency: ci.frequency || ''
             })) || []
@@ -293,6 +390,7 @@ async function main() {
     await seedAdminUser();
     await seedResearcher();
     await seedOperator();
+    await seedAdditionalUsers();
     
     // 2. Then seed protocols
     await seedProtocols();

@@ -1,3 +1,3 @@
-export { default as CreateStudy } from './CreateStudy';
-export { useCreateStudy } from './hooks/useCreateStudy';
-export type * from './types';
+export { CreateStudy } from './CreateStudy';
+export * from './types';
+export * from './hooks/useCreateStudy';

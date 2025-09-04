@@ -1,375 +1,401 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { studiesApi } from '../../../services/api';
-import {
-  StudyFormData,
-  ProtocolForStudy,
-  CreateStudyFormErrors,
-  CreateStudyStep,
-  UseCreateStudyReturn
-} from '../types';
+import { StudyFormData, CreateStudyStep, ProtocolData, StepMeasurementConfig, MeasurementDefinition } from '../types';
+import { CreateStudyForm } from '../../../types';
+import { protocolsApi, studiesApi, predefinedProtocolsApi } from '../../../services/api';
 
-const createEmptyStudyData = (): StudyFormData => ({
+const initialStudyData: StudyFormData = {
   name: '',
   description: '',
   protocolId: '',
   protocolName: '',
   category: '',
-  parametrizationMode: 'global',
-  selectedProtocol: null,
-  parameters: [],
-  stepParameters: {},
   settings: {
-    sampleSettings: {
-      sampleSize: 1,
-      sampleType: '',
-      preparation: [],
-      conditions: []
+    numberOfSamples: 3,
+    samplePrefix: 'S',
+    sampleNaming: 'automatic',
+    testConditions: {},
+    sessionSettings: {
+      allowMultipleSessions: false,
+      maxSamplesPerSession: 10,
+      sessionTimeout: 120,
+      autoStartNextSession: false,
     },
-    environmentalSettings: {
-      temperature: '20±2°C',
-      humidity: '50±5%RH',
-      pressure: 'atmosferyczne',
-      atmosphere: 'powietrze laboratoryjne'
-    },
-    qualitySettings: {
-      repeatability: 3,
-      accuracy: '±1%',
-      precision: '±0.5%',
-      calibration: []
-    }
+    operatorRequired: false, // Operator nie jest domyślnie wymagany
+    operatorName: '',
+    operatorEmail: '',
+    requiredEquipment: [],
   },
-  objectives: [],
-  expectedOutcomes: [],
-  timeline: {
-    estimatedDuration: '',
-    phases: [],
-    milestones: []
+  stepMeasurements: [],
+  operatorInfo: {
+    name: '',
+    position: '',
+    operatorId: '',
+    notes: '',
   },
-  resources: {
-    personnel: [],
-    equipment: [],
-    materials: [],
-    budget: {
-      totalBudget: 0,
-      currency: 'PLN',
-      breakdown: {
-        personnel: 0,
-        equipment: 0,
-        materials: 0,
-        overhead: 0,
-        contingency: 0
-      }
-    }
-  }
-});
+  equipmentList: [],
+};
 
-const STEPS: CreateStudyStep[] = [
-  'basic-info',
+const steps: CreateStudyStep[] = [
   'protocol-selection',
-  'parameters',
-  'settings',
-  'timeline',
-  'resources',
-  'review'
+  'basic-info',
+  'sample-configuration',
+  'test-conditions',
+  'session-configuration',
+  'step-measurements',  // KLUCZOWY KROK
+  'operator-equipment',
+  'review',
 ];
 
-export const useCreateStudy = (initialProtocolId?: string): UseCreateStudyReturn => {
-  const navigate = useNavigate();
-  const [studyData, setStudyData] = useState<StudyFormData>(() => {
-    const data = createEmptyStudyData();
-    if (initialProtocolId) {
-      data.protocolId = initialProtocolId;
-    }
-    return data;
-  });
-  
-  const [selectedProtocol, setSelectedProtocolState] = useState<ProtocolForStudy | null>(null);
-  const [errors, setErrors] = useState<CreateStudyFormErrors>({});
+export const useCreateStudy = () => {
+  const [currentStep, setCurrentStep] = useState<CreateStudyStep>('protocol-selection');
+  const [studyData, setStudyData] = useState<StudyFormData>(initialStudyData);
+  const [protocolData, setProtocolData] = useState<ProtocolData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
 
-  const currentStep = STEPS[currentStepIndex];
+  // ==================== AKTUALIZACJA DANYCH ====================
 
-  const updateStudyData = useCallback((data: Partial<StudyFormData>) => {
-    setStudyData(prev => ({ ...prev, ...data }));
-    // Wyczyść błędy dla zaktualizowanych pól
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      Object.keys(data).forEach(key => {
-        delete newErrors[key as keyof CreateStudyFormErrors];
+  const updateStudyData = useCallback((updates: Partial<StudyFormData>) => {
+    setStudyData(prev => ({
+      ...prev,
+      ...updates,
+      settings: updates.settings ? { ...prev.settings, ...updates.settings } : prev.settings,
+      stepMeasurements: updates.stepMeasurements || prev.stepMeasurements,
+    }));
+    setErrors({});
+  }, []);
+
+  // ==================== PROTOKOŁY ====================
+
+  const setProtocol = useCallback(async (protocol: ProtocolData) => {
+    console.log('🚀 setProtocol called with:', protocol);
+    setIsLoading(true);
+    try {
+      // Jeśli protokół nie ma pełnych danych (steps, testConditions), pobierz je z API
+      let fullProtocol = protocol;
+      if (!protocol.steps || protocol.steps.length === 0 || !protocol.testConditions) {
+        console.log('📡 Fetching full protocol details for:', protocol.id);
+        const result = await predefinedProtocolsApi.getById(protocol.id);
+        if (result.success) {
+          fullProtocol = result.data;
+          console.log('✅ Full protocol loaded:', fullProtocol);
+        }
+      }
+      
+      setProtocolData(fullProtocol);
+      
+      // Automatycznie ustaw dane z protokołu
+      const testConditions: Record<string, any> = {};
+      fullProtocol.testConditions?.forEach(condition => {
+        testConditions[condition.id] = {
+          name: condition.name,
+          value: condition.value,
+          unit: condition.unit,
+          tolerance: condition.tolerance,
+          required: condition.required,
+          description: condition.description,
+        };
       });
-      return newErrors;
+
+      // Inicjalizuj stepMeasurements na podstawie kroków protokołu
+      const stepMeasurements: StepMeasurementConfig[] = fullProtocol.steps?.map(step => ({
+        stepId: step.id,
+        stepTitle: step.title,
+        stepDescription: step.description,
+        measurements: [], // Puste na początku - użytkownik może dodawać opcjonalnie
+        isRequired: false, // Pomiary nie są wymagane w każdym kroku
+        estimatedDuration: step.duration,
+      })) || [];
+
+      const updateData = {
+        protocolId: fullProtocol.id,
+        protocolName: fullProtocol.title,
+        category: fullProtocol.category,
+        settings: {
+          ...studyData.settings,
+          testConditions,
+          requiredEquipment: fullProtocol.equipment?.map(eq => eq.name) || [],
+        },
+        stepMeasurements,
+      };
+
+      console.log('📝 Updating study data with:', updateData);
+      updateStudyData(updateData);
+    } catch (error) {
+      console.error('Error setting protocol:', error);
+      setErrors({ protocol: ['Błąd podczas ustawiania protokołu'] });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studyData.settings, updateStudyData]);
+
+  // ==================== POMIARY PER KROK ====================
+
+  const addMeasurementToStep = useCallback((stepId: string, measurement: MeasurementDefinition) => {
+    const updatedStepMeasurements = studyData.stepMeasurements.map(step => {
+      if (step.stepId === stepId) {
+        return {
+          ...step,
+          measurements: [...step.measurements, measurement],
+        };
+      }
+      return step;
     });
-  }, []);
-
-  const setSelectedProtocol = useCallback((protocol: ProtocolForStudy | null) => {
-    setSelectedProtocolState(protocol);
-    if (protocol) {
-      updateStudyData({
-        protocolId: protocol.id,
-        protocolName: protocol.title,
-        category: protocol.category,
-        selectedProtocol: protocol
-      });
-    } else {
-      updateStudyData({
-        protocolId: '',
-        protocolName: '',
-        category: '',
-        selectedProtocol: null
-      });
-    }
-  }, [updateStudyData]);
-
-  const validateBasicInfo = useCallback((): boolean => {
-    const newErrors: CreateStudyFormErrors = {};
     
-    if (!studyData.name.trim()) {
-      newErrors.name = 'Nazwa badania jest wymagana';
-    } else if (studyData.name.length < 3) {
-      newErrors.name = 'Nazwa badania musi mieć co najmniej 3 znaki';
-    }
+    updateStudyData({ stepMeasurements: updatedStepMeasurements });
+  }, [studyData.stepMeasurements, updateStudyData]);
+
+  const removeMeasurementFromStep = useCallback((stepId: string, measurementId: string) => {
+    const updatedStepMeasurements = studyData.stepMeasurements.map(step => {
+      if (step.stepId === stepId) {
+        return {
+          ...step,
+          measurements: step.measurements.filter(m => m.id !== measurementId),
+        };
+      }
+      return step;
+    });
     
-    if (!studyData.description.trim()) {
-      newErrors.description = 'Opis badania jest wymagany';
-    } else if (studyData.description.length < 10) {
-      newErrors.description = 'Opis badania musi mieć co najmniej 10 znaków';
-    }
+    updateStudyData({ stepMeasurements: updatedStepMeasurements });
+  }, [studyData.stepMeasurements, updateStudyData]);
 
-    setErrors(prev => ({ ...prev, ...newErrors }));
-    return Object.keys(newErrors).length === 0;
-  }, [studyData.name, studyData.description]);
-
-  const validateProtocolSelection = useCallback((): boolean => {
-    const newErrors: CreateStudyFormErrors = {};
+  const updateMeasurementInStep = useCallback((stepId: string, measurementId: string, updates: Partial<MeasurementDefinition>) => {
+    const updatedStepMeasurements = studyData.stepMeasurements.map(step => {
+      if (step.stepId === stepId) {
+        return {
+          ...step,
+          measurements: step.measurements.map(m => 
+            m.id === measurementId ? { ...m, ...updates } : m
+          ),
+        };
+      }
+      return step;
+    });
     
-    if (!studyData.protocolId) {
-      newErrors.protocol = 'Wybór protokołu jest wymagany';
-    }
+    updateStudyData({ stepMeasurements: updatedStepMeasurements });
+  }, [studyData.stepMeasurements, updateStudyData]);
 
-    setErrors(prev => ({ ...prev, ...newErrors }));
-    return Object.keys(newErrors).length === 0;
-  }, [studyData.protocolId]);
-
-  const validateParameters = useCallback((): boolean => {
-    const newErrors: CreateStudyFormErrors = {};
-    const parameterErrors: { [key: string]: string } = {};
+  // Dodaj sugerowane pomiary z protokołu (jeśli są)
+  const addSuggestedMeasurements = useCallback((stepId: string) => {
+    if (!protocolData?.suggestedMeasurements?.[stepId]) return;
     
-    if (studyData.parametrizationMode === 'global') {
-      // Walidacja globalnych parametrów
-      studyData.parameters.forEach(param => {
-        if (param.required && !param.value) {
-          parameterErrors[param.id] = `${param.name} jest wymagany`;
+    const suggestedMeasurements = protocolData.suggestedMeasurements[stepId];
+    const currentStep = studyData.stepMeasurements.find(s => s.stepId === stepId);
+    
+    if (currentStep) {
+      // Dodaj tylko te pomiary, które jeszcze nie istnieją
+      const existingMeasurementNames = currentStep.measurements.map(m => m.name);
+      const newMeasurements = suggestedMeasurements.filter(
+        m => !existingMeasurementNames.includes(m.name)
+      );
+      
+      const updatedStepMeasurements = studyData.stepMeasurements.map(step => {
+        if (step.stepId === stepId) {
+          return {
+            ...step,
+            measurements: [...step.measurements, ...newMeasurements],
+          };
         }
-        
-        if (param.type === 'number' && param.value) {
-          const numValue = Number(param.value);
-          if (isNaN(numValue)) {
-            parameterErrors[param.id] = 'Wartość musi być liczbą';
-          } else if (param.constraints?.min !== undefined && numValue < param.constraints.min) {
-            parameterErrors[param.id] = `Wartość nie może być mniejsza niż ${param.constraints.min}`;
-          } else if (param.constraints?.max !== undefined && numValue > param.constraints.max) {
-            parameterErrors[param.id] = `Wartość nie może być większa niż ${param.constraints.max}`;
-          }
-        }
+        return step;
       });
-    } else {
-      // Walidacja parametrów per krok
-      Object.entries(studyData.stepParameters).forEach(([stepId, stepParams]) => {
-        stepParams.forEach(param => {
-          if (param.required && !param.value) {
-            parameterErrors[`${stepId}-${param.id}`] = `${param.name} w kroku ${stepId} jest wymagany`;
-          }
-          
-          if (param.type === 'number' && param.value) {
-            const numValue = Number(param.value);
-            if (isNaN(numValue)) {
-              parameterErrors[`${stepId}-${param.id}`] = 'Wartość musi być liczbą';
-            } else if (param.constraints?.min !== undefined && numValue < param.constraints.min) {
-              parameterErrors[`${stepId}-${param.id}`] = `Wartość nie może być mniejsza niż ${param.constraints.min}`;
-            } else if (param.constraints?.max !== undefined && numValue > param.constraints.max) {
-              parameterErrors[`${stepId}-${param.id}`] = `Wartość nie może być większa niż ${param.constraints.max}`;
-            }
-          }
-        });
-      });
+      
+      updateStudyData({ stepMeasurements: updatedStepMeasurements });
     }
+  }, [protocolData, studyData.stepMeasurements, updateStudyData]);
 
-    if (Object.keys(parameterErrors).length > 0) {
-      newErrors.parameters = parameterErrors;
+  // ==================== NAWIGACJA ====================
+
+  const currentStepIndex = steps.indexOf(currentStep);
+  
+  const goToNextStep = useCallback(() => {
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStep(steps[currentStepIndex + 1]);
     }
+  }, [currentStepIndex]);
 
-    setErrors(prev => ({ ...prev, ...newErrors }));
-    return Object.keys(newErrors).length === 0;
-  }, [studyData.parameters, studyData.stepParameters, studyData.parametrizationMode]);
-
-  const validateSettings = useCallback((): boolean => {
-    const newErrors: CreateStudyFormErrors = {};
-    const settingsErrors: { [key: string]: string } = {};
-    
-    if (studyData.settings.sampleSettings.sampleSize < 1) {
-      settingsErrors.sampleSize = 'Rozmiar próby musi być co najmniej 1';
-    }
-    
-    if (!studyData.settings.sampleSettings.sampleType.trim()) {
-      settingsErrors.sampleType = 'Typ próby jest wymagany';
-    }
-
-    if (Object.keys(settingsErrors).length > 0) {
-      newErrors.settings = settingsErrors;
-    }
-
-    setErrors(prev => ({ ...prev, ...newErrors }));
-    return Object.keys(newErrors).length === 0;
-  }, [studyData.settings]);
-
-  const validateTimeline = useCallback((): boolean => {
-    const newErrors: CreateStudyFormErrors = {};
-    
-    if (!studyData.timeline.estimatedDuration.trim()) {
-      newErrors.timeline = 'Szacowany czas trwania jest wymagany';
-    }
-
-    setErrors(prev => ({ ...prev, ...newErrors }));
-    return Object.keys(newErrors).length === 0;
-  }, [studyData.timeline.estimatedDuration]);
-
-  const validateResources = useCallback((): boolean => {
-    // Zasoby są opcjonalne na tym etapie
-    return true;
-  }, []);
-
-  const validateStep = useCallback((step: CreateStudyStep): boolean => {
-    switch (step) {
-      case 'basic-info':
-        return validateBasicInfo();
-      case 'protocol-selection':
-        return validateProtocolSelection();
-      case 'parameters':
-        return validateParameters();
-      case 'settings':
-        return validateSettings();
-      case 'timeline':
-        return validateTimeline();
-      case 'resources':
-        return validateResources();
-      case 'review':
-        return true; // Review nie wymaga walidacji
-      default:
-        return false;
-    }
-  }, [validateBasicInfo, validateProtocolSelection, validateParameters, validateSettings, validateTimeline, validateResources]);
-
-  const isStepValid = useCallback((step: CreateStudyStep): boolean => {
-    // Sprawdź czy krok może być uznany za ważny bez pokazywania błędów
-    switch (step) {
-      case 'basic-info':
-        return !!(studyData.name.trim() && studyData.description.trim() && studyData.name.length >= 3 && studyData.description.length >= 5);
-      case 'protocol-selection':
-        return !!studyData.protocolId;
-      case 'parameters':
-        // Walidacja w zależności od trybu parametryzacji
-        if (studyData.parametrizationMode === 'global') {
-          return studyData.parameters.length === 0 || studyData.parameters.every(param => !param.required || param.value);
-        } else {
-          // Dla trybu per-step sprawdź czy wszystkie wymagane parametry każdego kroku są wypełnione
-          return Object.values(studyData.stepParameters).every(stepParams => 
-            stepParams.every(param => !param.required || param.value)
-          );
-        }
-      case 'settings':
-        return studyData.settings.sampleSettings.sampleSize >= 1 && studyData.settings.sampleSettings.sampleType.trim() !== '';
-      case 'timeline':
-        return !!studyData.timeline.estimatedDuration.trim();
-      case 'resources':
-        // Zasoby są opcjonalne - krok jest zawsze ważny
-        return true;
-      case 'review':
-        // Review jest ważny tylko jeśli wszystkie wymagane kroki są ukończone
-        return !!(studyData.name.trim() && studyData.protocolId && studyData.timeline.estimatedDuration.trim() && 
-                 studyData.settings.sampleSettings.sampleSize >= 1 && studyData.settings.sampleSettings.sampleType.trim());
-      default:
-        return false;
-    }
-  }, [studyData]);
-
-  const nextStep = useCallback(() => {
-    if (validateStep(currentStep) && currentStepIndex < STEPS.length - 1) {
-      setCurrentStepIndex(prev => prev + 1);
-    }
-  }, [currentStep, currentStepIndex, validateStep]);
-
-  const previousStep = useCallback(() => {
+  const goToPreviousStep = useCallback(() => {
     if (currentStepIndex > 0) {
-      setCurrentStepIndex(prev => prev - 1);
+      setCurrentStep(steps[currentStepIndex - 1]);
     }
   }, [currentStepIndex]);
 
   const goToStep = useCallback((step: CreateStudyStep) => {
-    const stepIndex = STEPS.indexOf(step);
-    if (stepIndex !== -1) {
-      setCurrentStepIndex(stepIndex);
-    }
+    setCurrentStep(step);
   }, []);
 
-  const submitStudy = useCallback(async (): Promise<boolean> => {
+  // ==================== WALIDACJA ====================
+
+  const validateCurrentStep = useCallback((): boolean => {
+    const newErrors: Record<string, string[]> = {};
+
+    console.log('🔍 Validating current step:', currentStep);
+    console.log('📋 Current studyData:', studyData);
+
+    switch (currentStep) {
+      case 'protocol-selection':
+        console.log('🧪 Protocol ID:', studyData.protocolId);
+        if (!studyData.protocolId) {
+          newErrors.protocol = ['Wybierz protokół badawczy'];
+        }
+        break;
+
+      case 'basic-info':
+        if (!studyData.name.trim()) {
+          newErrors.name = ['Nazwa studium jest wymagana'];
+        }
+        if (studyData.name.length < 3) {
+          newErrors.name = [...(newErrors.name || []), 'Nazwa musi mieć co najmniej 3 znaki'];
+        }
+        break;
+
+      case 'sample-configuration':
+        if (studyData.settings.numberOfSamples < 1) {
+          newErrors.numberOfSamples = ['Liczba próbek musi być większa od 0'];
+        }
+        if (studyData.settings.numberOfSamples > 1000) {
+          newErrors.numberOfSamples = ['Maksymalna liczba próbek to 1000'];
+        }
+        if (!studyData.settings.samplePrefix.trim()) {
+          newErrors.samplePrefix = ['Prefiks próbek jest wymagany'];
+        }
+        break;
+
+      case 'session-configuration':
+        if (studyData.settings.sessionSettings.maxSamplesPerSession < 1) {
+          newErrors.maxSamplesPerSession = ['Liczba próbek na sesję musi być większa od 0'];
+        }
+        if (studyData.settings.sessionSettings.sessionTimeout < 5) {
+          newErrors.sessionTimeout = ['Timeout sesji musi być co najmniej 5 minut'];
+        }
+        break;
+
+      case 'step-measurements':
+        console.log('🔍 Validating step-measurements');
+        console.log('📊 stepMeasurements:', studyData.stepMeasurements);
+        
+        // Pomiary nie są wymagane - sprawdź tylko czy te które zostały dodane mają poprawne nazwy
+        studyData.stepMeasurements?.forEach(step => {
+          step.measurements?.forEach(measurement => {
+            if (!measurement.name?.trim()) {
+              newErrors.measurementNames = [...(newErrors.measurementNames || []), 
+                `Pomiar w kroku "${step.stepTitle}" nie ma nazwy`];
+            }
+          });
+        });
+        break;
+
+      case 'operator-equipment':
+        console.log('🔍 Validating operator-equipment');
+        console.log('📊 operatorRequired:', studyData.settings.operatorRequired);
+        console.log('📊 operatorInfo:', studyData.operatorInfo);
+        
+        if (studyData.settings.operatorRequired) {
+          if (!studyData.operatorInfo?.operatorId?.trim()) {
+            newErrors.operatorName = ['ID użytkownika jest wymagane'];
+          }
+        }
+        break;
+    }
+
+    console.log('❌ Validation errors:', newErrors);
+    setErrors(newErrors);
+    const isValid = Object.keys(newErrors).length === 0;
+    console.log('✅ Is valid:', isValid);
+    return isValid;
+  }, [currentStep, studyData]);
+
+  // ==================== TWORZENIE STUDIUM ====================
+
+  const createStudy = useCallback(async (): Promise<{ success: boolean; data?: any; error?: string }> => {
+    if (!validateCurrentStep()) {
+      return { success: false, error: 'Błędy walidacji' };
+    }
+
     setIsLoading(true);
     try {
-      // Waliduj wszystkie kroki przed wysłaniem
-      const allStepsValid = STEPS.every(step => validateStep(step));
-      if (!allStepsValid) {
-        toast.error('Sprawdź wszystkie wymagane pola');
-        return false;
-      }
-
-      const response = await studiesApi.create({
-        name: studyData.name,
+      const requestData: CreateStudyForm = {
+        name: studyData.name, // Przywracamy 'name'
         description: studyData.description,
         protocolId: studyData.protocolId,
-        status: 'draft',
-        // Dodaj inne wymagane pola zgodnie z API
-      } as any);
+        category: studyData.category,
+        settings: {
+          ...studyData.settings,
+          // Dodaj stepMeasurements do settings jako część konfiguracji
+          stepMeasurements: studyData.stepMeasurements,
+        },
+        parameters: {}, // Dodaj pusty parameters jeśli wymagany
+      };
+
+      const response = await studiesApi.create(requestData);
 
       if (response.success) {
-        toast.success('Badanie zostało utworzone pomyślnie!');
-        navigate('/studies');
-        return true;
+        return { success: true, data: response.data };
       } else {
-        toast.error(response.error || 'Błąd podczas tworzenia badania');
-        return false;
+        return { success: false, error: response.error || 'Nieznany błąd' };
       }
     } catch (error) {
       console.error('Error creating study:', error);
-      toast.error('Błąd podczas tworzenia badania');
-      return false;
+      return { success: false, error: 'Błąd połączenia z serwerem' };
     } finally {
       setIsLoading(false);
     }
-  }, [studyData, validateStep, navigate]);
+  }, [studyData, validateCurrentStep]);
+
+  // ==================== UTILITIES ====================
 
   const resetForm = useCallback(() => {
-    setStudyData(createEmptyStudyData());
-    setSelectedProtocolState(null);
+    setStudyData(initialStudyData);
+    setProtocolData(null);
+    setCurrentStep('protocol-selection');
     setErrors({});
-    setCurrentStepIndex(0);
   }, []);
 
+  // Oblicz całkowitą liczbę pomiarów
+  const totalMeasurements = studyData.stepMeasurements.reduce(
+    (total, step) => total + step.measurements.length, 
+    0
+  );
+
+  // Sprawdź czy studium jest gotowe do utworzenia
+  const isStudyReady = studyData.protocolId && 
+                      studyData.name && 
+                      studyData.stepMeasurements.some(step => step.measurements.length > 0);
+
   return {
-    studyData,
-    selectedProtocol,
-    errors,
-    isLoading,
+    // Stan
     currentStep,
-    isStepValid,
+    studyData,
+    protocolData,
+    isLoading,
+    errors,
+    
+    // Nawigacja
+    currentStepIndex,
+    totalSteps: steps.length,
+    isFirstStep: currentStepIndex === 0,
+    isLastStep: currentStepIndex === steps.length - 1,
+    
+    // Akcje podstawowe
     updateStudyData,
-    setSelectedProtocol,
-    validateStep,
-    nextStep,
-    previousStep,
+    setProtocol,
+    goToNextStep,
+    goToPreviousStep,
     goToStep,
-    submitStudy,
-    resetForm
+    validateCurrentStep,
+    createStudy,
+    resetForm,
+    
+    // Akcje dla pomiarów
+    addMeasurementToStep,
+    removeMeasurementFromStep,
+    updateMeasurementInStep,
+    addSuggestedMeasurements,
+    
+    // Statystyki
+    totalMeasurements,
+    isStudyReady,
+    
+    // Stałe
+    steps,
   };
 };

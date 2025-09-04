@@ -1,158 +1,186 @@
-export type ParametrizationMode = 'global' | 'per-step';
+// Typy dla systemu CreateStudy z konfiguracją pomiarów per krok
 
 export interface StudyFormData {
+  // Podstawowe informacje
   name: string;
   description: string;
   protocolId: string;
-  protocolName?: string;
-  category?: string;
-  parametrizationMode: ParametrizationMode;
-  selectedProtocol: ProtocolForStudy | null;
-  parameters: StudyParameter[];
-  stepParameters: { [stepId: string]: StudyParameter[] }; // Parametry per krok
+  protocolName: string;
+  category: string;
+  
+  // Ustawienia badania
   settings: StudySettings;
-  objectives: string[];
-  expectedOutcomes: string[];
-  timeline: StudyTimeline;
-  resources: StudyResources;
-}
-
-export interface StudyParameter {
-  id: string;
-  name: string;
-  type: 'number' | 'text' | 'boolean' | 'date' | 'select' | 'multiselect';
-  value: any;
-  unit?: string;
-  required: boolean;
-  description?: string;
-  constraints?: {
-    min?: number;
-    max?: number;
-    options?: string[];
-    regex?: string;
-  };
+  
+  // Konfiguracja kroków z pomiarami
+  stepMeasurements: StepMeasurementConfig[];
+  
+  // Operator
+  operatorInfo: OperatorInfo;
+  
+  // Lista wyposażenia
+  equipmentList: EquipmentItem[];
 }
 
 export interface StudySettings {
-  sampleSettings: {
-    sampleSize: number;
-    sampleType: string;
-    preparation: string[];
-    conditions: string[];
+  // Ustawienia próbek
+  numberOfSamples: number;
+  samplePrefix: string;
+  sampleNaming: 'automatic' | 'manual';
+  numerationType?: 'auto' | 'manual';  // Dodane dla kompatybilności
+  
+  // Warunki testowe (z protokołu, można edytować)
+  testConditions: Record<string, TestConditionValue>;
+  
+  // Konfiguracja sesji
+  sessionSettings: {
+    allowMultipleSessions: boolean;
+    maxSamplesPerSession: number;
+    sessionTimeout: number; // minuty
+    autoStartNextSession: boolean;
   };
-  environmentalSettings: {
-    temperature: string;
-    humidity: string;
-    pressure: string;
-    atmosphere: string;
-  };
-  qualitySettings: {
-    repeatability: number;
-    accuracy: string;
-    precision: string;
-    calibration: string[];
-  };
+  
+  // Operator i sprzęt
+  operatorRequired: boolean;
+  operatorName?: string;
+  operatorEmail?: string;
+  operatorId?: string;
+  requiredEquipment: string[];
 }
 
-export interface StudyTimeline {
-  estimatedDuration: string;
-  phases: StudyPhase[];
-  milestones: StudyMilestone[];
-}
-
-export interface StudyPhase {
-  id: string;
+export interface TestConditionValue {
   name: string;
-  description: string;
-  duration: string;
-  dependencies: string[];
-  tasks: StudyTask[];
-}
-
-export interface StudyTask {
-  id: string;
-  name: string;
-  description: string;
-  duration: string;
-  assignee?: string;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  status: 'pending' | 'in-progress' | 'completed' | 'blocked';
-}
-
-export interface StudyMilestone {
-  id: string;
-  name: string;
-  description: string;
-  date: string;
-  type: 'start' | 'checkpoint' | 'deliverable' | 'end';
-}
-
-export interface StudyResources {
-  personnel: PersonnelResource[];
-  equipment: EquipmentResource[];
-  materials: MaterialResource[];
-  budget: BudgetResource;
-}
-
-export interface PersonnelResource {
-  id: string;
-  name: string;
-  role: string;
-  responsibility?: string;
-  allocation: number; // procent czasu
-  skills?: string[];
-  availability?: string;
-  cost?: number;
-}
-
-export interface EquipmentResource {
-  id: string;
-  name: string;
-  type?: string;
-  specification?: string;
-  specifications?: string[];
-  quantity?: number;
-  availability?: string;
-  calibrationStatus?: 'valid' | 'due' | 'overdue';
-  cost?: number;
-}
-
-export interface MaterialResource {
-  id: string;
-  name: string;
-  type?: string;
+  value: string;
+  unit: string;
+  tolerance: string;
+  required: boolean;
   description?: string;
-  quantity: string; // może być tekstem jak "10 kg"
-  unit?: string;
-  supplier?: string;
-  specifications?: string[];
-  cost?: number;
 }
 
-export interface BudgetResource {
-  totalBudget: number;
-  currency: string;
-  breakdown: {
-    personnel: number;
-    equipment: number;
-    materials: number;
-    overhead: number;
-    contingency: number;
-  };
+// ==================== OPERATOR I WYPOSAŻENIE ====================
+
+export interface OperatorInfo {
+  name: string;
+  position: string;
+  operatorId: string;
+  notes: string;
 }
 
-export interface ProtocolForStudy {
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  model: string;
+  serialNumber: string;
+  calibrationDate: string;
+  notes: string;
+}
+
+export interface ProtocolEquipmentRequirement {
+  name: string;
+  specifications?: string;
+  accuracy?: string;
+  notes?: string;
+}
+
+// ==================== POMIARY PER KROK ====================
+
+export interface StepMeasurementConfig {
+  stepId: string;           // ID kroku z protokołu
+  stepTitle: string;        // Nazwa kroku
+  stepDescription: string;  // Opis kroku
+  measurements: MeasurementDefinition[];  // Lista pomiarów dla tego kroku
+  isRequired: boolean;      // Czy krok jest wymagany
+  estimatedDuration: string; // Szacowany czas (z protokołu)
+}
+
+export interface MeasurementDefinition {
+  id: string;                    // Unikalny ID pomiaru
+  name: string;                  // Nazwa (np. "Siła maksymalna")
+  description?: string;          // Opis pomiaru
+  type: DataPointType;           // Typ pomiaru
+  dataType: DataType;            // Typ danych
+  unit?: string;                 // Jednostka (MPa, °C, mm)
+  isRequired: boolean;           // Czy wymagany
+  validationRules?: ValidationRules;  // Reguły walidacji
+  defaultValue?: any;            // Wartość domyślna
+  formula?: string;              // Formuła (dla CALCULATION)
+  dependsOn?: string[];          // Zależności (ID innych pomiarów)
+  category?: MeasurementCategory; // Kategoria pomiaru
+}
+
+export interface ValidationRules {
+  min?: number;                  // Minimalna wartość
+  max?: number;                  // Maksymalna wartość
+  pattern?: string;              // Regex dla TEXT
+  options?: string[];            // Opcje dla SELECTION
+  precision?: number;            // Dokładność dla NUMBER
+}
+
+// ==================== ENUMS (z Backend) ====================
+
+export enum DataPointType {
+  MEASUREMENT = 'MEASUREMENT',    // Pomiary bezpośrednie (siła, temperatura)
+  OBSERVATION = 'OBSERVATION',    // Obserwacje (uwagi, zdjęcia)  
+  CALCULATION = 'CALCULATION',    // Obliczenia (naprężenie, moduł)
+  CONDITION = 'CONDITION'         // Warunki (temperatura otoczenia)
+}
+
+export enum DataType {
+  NUMBER = 'NUMBER',       // Wartości numeryczne
+  TEXT = 'TEXT',          // Tekst, uwagi
+  BOOLEAN = 'BOOLEAN',    // Tak/Nie, checkboxy
+  DATE = 'DATE'           // Data/czas
+}
+
+export enum MeasurementCategory {
+  MECHANICAL = 'MECHANICAL',
+  THERMAL = 'THERMAL',
+  ELECTRICAL = 'ELECTRICAL',
+  CHEMICAL = 'CHEMICAL',
+  DIMENSIONAL = 'DIMENSIONAL',
+  OPTICAL = 'OPTICAL',
+  ENVIRONMENTAL = 'ENVIRONMENTAL'
+}
+
+// ==================== PROTOKOŁY ====================
+
+export interface ProtocolData {
   id: string;
   title: string;
-  description?: string;
+  name?: string;  // Alias dla title
+  description: string;
   category: string;
-  type?: 'PREDEFINED' | 'USER';
-  difficulty?: string;
-  estimatedDuration?: string;
-  steps?: ProtocolStep[];
-  equipment?: any[];
-  materials?: string[];
-  safetyGuidelines?: string[];
+  standard?: string;
+  difficulty: string;
+  estimatedDuration: string;
+  
+  overview: {
+    purpose: string;
+    scope: string;
+    principles: string;
+    standards: string[];
+  };
+  
+  equipment: ProtocolEquipment[];
+  materials: string[];
+  safetyGuidelines: string[];
+  
+  // Wymagania operatora
+  operatorRequirements?: string[];
+  
+  // Wymagane wyposażenie (bardziej szczegółowe)
+  equipmentRequired?: ProtocolEquipmentRequirement[];
+  
+  // Warunki testowe z protokołu
+  testConditions: ProtocolTestCondition[];
+  
+  // Kroki protokołu
+  steps: ProtocolStep[];
+  
+  // Obliczenia standardowe z protokołu
+  calculations?: ProtocolCalculation[];
+  
+  // Sugerowane pomiary per krok (predefined)
+  suggestedMeasurements?: Record<string, MeasurementDefinition[]>;
 }
 
 export interface ProtocolStep {
@@ -161,42 +189,80 @@ export interface ProtocolStep {
   description: string;
   duration: string;
   instructions: string[];
-  tips?: string[];
-  safety?: string[];
+  tips: string[];
+  safety: string[];
 }
 
-export interface CreateStudyFormErrors {
-  name?: string;
+export interface ProtocolTestCondition {
+  id: string;
+  name: string;
+  value: string;
+  unit: string;
+  tolerance: string;
+  category: string;
+  required: boolean;
   description?: string;
-  protocol?: string;
-  parameters?: { [key: string]: string };
-  settings?: { [key: string]: string };
-  timeline?: string;
-  resources?: { [key: string]: string };
+}
+
+export interface ProtocolEquipment {
+  name: string;
+  specification: string;
+}
+
+export interface ProtocolCalculation {
+  parameter: string;
+  formula: string;
+  units: string;
+  description: string;
+}
+
+// ==================== KOMPONENTY ====================
+
+export interface CreateStudyStepProps {
+  studyData: StudyFormData;
+  protocolData?: ProtocolData;
+  errors?: Record<string, string[]>;
+  onUpdateStudyData: (data: Partial<StudyFormData>) => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  isFirstStep: boolean;
+  isLastStep: boolean;
+  isValid: boolean;
 }
 
 export type CreateStudyStep = 
-  | 'basic-info'
   | 'protocol-selection'
-  | 'parameters'
-  | 'settings'
-  | 'timeline'
-  | 'resources'
+  | 'basic-info'
+  | 'sample-configuration'
+  | 'test-conditions'
+  | 'session-configuration'
+  | 'step-measurements'      // NOWY KROK - konfiguracja pomiarów
+  | 'operator-equipment'
   | 'review';
 
-export interface UseCreateStudyReturn {
-  studyData: StudyFormData;
-  selectedProtocol: ProtocolForStudy | null;
-  errors: CreateStudyFormErrors;
-  isLoading: boolean;
-  currentStep: CreateStudyStep;
-  isStepValid: (step: CreateStudyStep) => boolean;
-  updateStudyData: (data: Partial<StudyFormData>) => void;
-  setSelectedProtocol: (protocol: ProtocolForStudy | null) => void;
-  validateStep: (step: CreateStudyStep) => boolean;
-  nextStep: () => void;
-  previousStep: () => void;
-  goToStep: (step: CreateStudyStep) => void;
-  submitStudy: () => Promise<boolean>;
-  resetForm: () => void;
+// ==================== API RESPONSES ====================
+
+export interface CreateStudyRequest {
+  name: string;
+  description: string;
+  protocolId: string;
+  protocolName: string;
+  category: string;
+  settings: StudySettings;
+  stepMeasurements: StepMeasurementConfig[];  // Nowe pole
+}
+
+export interface StudySession {
+  id: string;
+  studyId: string;
+  sessionName: string;
+  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  operatorId?: string;
+  totalSamples: number;
+  completedSamples: number;
+  currentStepId?: string;
+  stepMeasurements: StepMeasurementConfig[];  // Pomiary skopiowane ze studium
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
 }

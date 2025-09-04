@@ -463,4 +463,41 @@ export class AuthController {
       });
     }
   };
+
+  // Get users list for operator selection
+  getUsers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const users = await this.prisma.user.findMany({
+        where: {
+          isActive: true,
+          isVerified: true
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          username: true,
+          title: true,
+          department: true,
+          position: true
+        },
+        orderBy: [
+          { firstName: 'asc' },
+          { lastName: 'asc' }
+        ]
+      });
+
+      res.json({
+        success: true,
+        data: users
+      });
+    } catch (error) {
+      console.error('Get users controller error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Wewnętrzny błąd serwera'
+      });
+    }
+  };
 }

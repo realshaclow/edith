@@ -7,11 +7,11 @@ import passport from 'passport';
 import { PrismaClient } from '@prisma/client';
 
 // Import routes
-import studiesRoutes from './routes/studies';
-import predefinedProtocolsRoutes from './routes/predefinedProtocols';
-import protocolsRoutes from './routes/protocols';
+import { studyRoutes } from './modules/study';
 import analyticsRoutes from './analytics/routes';
 import { createAuthRoutes } from './auth';
+import { createProtocolRoutes } from './modules/protocol';
+import { studyExecutionRouter } from './study-execution/routes';
 
 // Load environment variables
 dotenv.config();
@@ -49,12 +49,50 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Public endpoint for operators list (for study creation)
+app.get('/api/public/operators', async (req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        isVerified: true
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        username: true,
+        title: true,
+        department: true,
+        position: true
+      },
+      orderBy: [
+        { firstName: 'asc' },
+        { lastName: 'asc' }
+      ],
+      take: 50 // Limit to reasonable number
+    });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error('Error fetching operators:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Błąd podczas pobierania listy operatorów'
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', createAuthRoutes(prisma));
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/studies', studiesRoutes);
-app.use('/api/predefined-protocols', predefinedProtocolsRoutes);
-app.use('/api/protocols', protocolsRoutes);
+app.use('/api/studies', studyRoutes);
+app.use('/api/protocols', createProtocolRoutes(prisma)); // New protocol module
+app.use('/api', studyExecutionRouter); // Study execution routes
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

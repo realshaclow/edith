@@ -19,9 +19,37 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import { useStudies } from '../../hooks/useStudies';
+import { StudyDto, StudySessionDto } from '../../services/studiesApi';
 import { StudySession } from '../../types';
 import { ComprehensiveAnalysis, AnalysisConfig } from './types/analytics';
 import { StatisticalAnalyzer, AnalyticsReportGenerator } from './utils/statisticalAnalyzer';
+
+// Converter function to convert StudySessionDto to StudySession
+const convertSessionDtoToSession = (sessionDto: StudySessionDto): StudySession => ({
+  id: sessionDto.id,
+  studyId: sessionDto.studyId,
+  operator: sessionDto.operatorName || sessionDto.operatorId,
+  startTime: new Date(sessionDto.startTime || Date.now()),
+  endTime: sessionDto.endTime ? new Date(sessionDto.endTime) : undefined,
+  data: Array.isArray(sessionDto.data) 
+    ? sessionDto.data.reduce((acc: Record<string, number>, item: any) => {
+        if (item && typeof item === 'object') {
+          Object.keys(item).forEach(key => {
+            if (typeof item[key] === 'number') {
+              acc[key] = item[key];
+            }
+          });
+        }
+        return acc;
+      }, {})
+    : {},
+  conditions: sessionDto.conditions,
+  notes: sessionDto.notes,
+  status: sessionDto.status,
+  progress: { completed: sessionDto.completedSteps, total: sessionDto.totalSteps, percentage: sessionDto.progress },
+  createdAt: sessionDto.createdAt,
+  updatedAt: sessionDto.updatedAt,
+});
 
 // Import komponentów analitycznych
 import DescriptiveStats from './components/DescriptiveStats';
@@ -57,7 +85,16 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index, ...other })
 
 const StudyStatistics: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { studies, isLoading, error, fetchStudies } = useStudies();
+  const { 
+    studies, 
+    study,
+    sessions,
+    isLoading, 
+    error, 
+    fetchStudies, 
+    fetchStudy,
+    fetchSessions
+  } = useStudies();
   
   const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -75,25 +112,28 @@ const StudyStatistics: React.FC = () => {
     trendMethod: 'linear'
   });
 
-  const currentStudy = studies.find(study => study.id === id);
+  // Use the current study from the hook or find it from studies
+  const currentStudy = study || studies.find(s => s.id === id);
   
   // Dostępne parametry dla analizy
   const availableParameters = analysis && analysis.parameters ? Object.keys(analysis.parameters) : [];
 
   useEffect(() => {
-    if (!studies.length) {
-      fetchStudies();
+    if (id) {
+      // Fetch the specific study and its sessions
+      fetchStudy(id);
+      fetchSessions(id);
     }
-  }, [studies.length, fetchStudies]);
+  }, [id, fetchStudy, fetchSessions]);
 
   useEffect(() => {
-    if (currentStudy?.sessions && currentStudy.sessions.length > 0) {
+    if (sessions && sessions.length > 0) {
       performAnalysis();
     }
-  }, [currentStudy, analysisConfig]);
+  }, [sessions, analysisConfig]);
 
   const performAnalysis = async () => {
-    if (!currentStudy?.sessions || currentStudy.sessions.length === 0) {
+    if (!sessions || sessions.length === 0) {
       setAnalysisError('Brak danych do analizy');
       return;
     }
@@ -102,8 +142,9 @@ const StudyStatistics: React.FC = () => {
     setAnalysisError(null);
 
     try {
+      const convertedSessions = sessions.map(convertSessionDtoToSession);
       const comprehensiveAnalysis = AnalyticsReportGenerator.generateComprehensiveAnalysis(
-        currentStudy.sessions,
+        convertedSessions,
         analysisConfig
       );
       
@@ -128,11 +169,11 @@ const StudyStatistics: React.FC = () => {
   };
 
   const getParameterValues = (paramName: string): number[] => {
-    if (!currentStudy?.sessions) return [];
+    if (!sessions) return [];
     
-    return currentStudy.sessions
-      .map(session => session.data?.[paramName])
-      .filter(value => typeof value === 'number' && !isNaN(value)) as number[];
+    return sessions
+      .map((session: StudySessionDto) => session.data && (session.data as any)[paramName])
+      .filter((value: any) => typeof value === 'number' && !isNaN(value)) as number[];
   };
 
   const getParameterUnit = (paramName: string): string => {
@@ -179,7 +220,7 @@ const StudyStatistics: React.FC = () => {
     );
   }
 
-  if (!currentStudy.sessions || currentStudy.sessions.length === 0) {
+  if (!sessions || sessions.length === 0) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="info">
@@ -244,7 +285,7 @@ const StudyStatistics: React.FC = () => {
           Analiza statystyczna
         </Typography>
         <Typography variant="h6" color="text.secondary" gutterBottom>
-          {currentStudy.name}
+          {currentStudy?.title || 'Badanie'}
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Wygenerowano: {analysis.generatedAt ? new Date(analysis.generatedAt).toLocaleString('pl-PL') : 'Brak danych'}
@@ -257,7 +298,7 @@ const StudyStatistics: React.FC = () => {
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={4}>
               <Typography variant="body2">
-                <strong>Liczba sesji pomiarowych:</strong> {currentStudy.sessions.length}
+                <strong>Liczba sesji pomiarowych:</strong> {sessions?.length || 0}
               </Typography>
             </Grid>
             <Grid item xs={12} md={4}>

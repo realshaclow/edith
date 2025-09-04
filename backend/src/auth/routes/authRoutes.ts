@@ -22,21 +22,29 @@ export const createAuthRoutes = (prisma: PrismaClient): Router => {
   const oauthManager = OAuthManager.getInstance(prisma);
   oauthManager.initialize();
 
-  // Rate limiting middleware for auth endpoints
-  const loginRateLimit = authRateLimit(
-    securityConfig.rateLimiting.loginAttempts.windowMs,
-    securityConfig.rateLimiting.loginAttempts.maxAttempts
-  );
+  // Rate limiting middleware for auth endpoints (disabled in development)
+  const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+  
+  const loginRateLimit = isDevelopment ? 
+    (req: any, res: any, next: any) => next() : // Skip rate limiting in development
+    authRateLimit(
+      securityConfig.rateLimiting.loginAttempts.windowMs,
+      securityConfig.rateLimiting.loginAttempts.maxAttempts
+    );
 
-  const registrationRateLimit = authRateLimit(
-    securityConfig.rateLimiting.registration.windowMs,
-    securityConfig.rateLimiting.registration.maxAttempts
-  );
+  const registrationRateLimit = isDevelopment ?
+    (req: any, res: any, next: any) => next() : // Skip rate limiting in development
+    authRateLimit(
+      securityConfig.rateLimiting.registration.windowMs,
+      securityConfig.rateLimiting.registration.maxAttempts
+    );
 
-  const passwordResetRateLimit = authRateLimit(
-    securityConfig.rateLimiting.passwordReset.windowMs,
-    securityConfig.rateLimiting.passwordReset.maxAttempts
-  );
+  const passwordResetRateLimit = isDevelopment ?
+    (req: any, res: any, next: any) => next() : // Skip rate limiting in development
+    authRateLimit(
+      securityConfig.rateLimiting.passwordReset.windowMs,
+      securityConfig.rateLimiting.passwordReset.maxAttempts
+    );
 
   // Public routes
   router.post('/register', registrationRateLimit, validateRegistration, authController.register);
@@ -57,6 +65,7 @@ export const createAuthRoutes = (prisma: PrismaClient): Router => {
   router.post('/change-password', validateChangePassword, authController.changePassword);
   router.get('/sessions', authController.getSessions);
   router.delete('/sessions/:sessionId', authController.revokeSession);
+  router.get('/users', authController.getUsers);
 
   return router;
 };

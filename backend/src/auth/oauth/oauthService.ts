@@ -122,7 +122,17 @@ export class OAuthService {
         const user = await this.prisma.user.findUnique({
           where: { id }
         });
-        done(null, user);
+        // Convert null values to undefined for User type compatibility
+        const userForPassport = user ? {
+          ...user,
+          username: user.username ?? undefined,
+          firstName: user.firstName ?? undefined,
+          lastName: user.lastName ?? undefined,
+          affiliation: user.affiliation ?? undefined,
+          title: user.title ?? undefined,
+          salt: user.salt ?? undefined
+        } as any : null;
+        done(null, userForPassport);
       } catch (error) {
         done(error, null);
       }

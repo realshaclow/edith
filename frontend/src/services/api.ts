@@ -4,7 +4,13 @@ import {
   Study,
   StudyStatus,
   CreateStudyForm,
-  UpdateStudyForm
+  UpdateStudyForm,
+  StudyExecution,
+  CreateStudyExecutionRequest,
+  AddMeasurementRequest,
+  CreateExportRequest,
+  StudyExecutionFilters,
+  PaginationOptions
 } from '../types';
 
 // Konfiguracja axios
@@ -78,19 +84,19 @@ export const studiesApi = {
 export const predefinedProtocolsApi = {
   // Pobierz wszystkie predefiniowane protokoły
   getAll: async (): Promise<ApiResponse<any[]>> => {
-    const response = await api.get<ApiResponse<any[]>>('/predefined-protocols');
+    const response = await api.get<ApiResponse<any[]>>('/protocols/public');
     return response.data;
   },
 
   // Pobierz protokół po ID
   getById: async (id: string): Promise<ApiResponse<any>> => {
-    const response = await api.get<ApiResponse<any>>(`/predefined-protocols/${id}`);
+    const response = await api.get<ApiResponse<any>>(`/protocols/${id}`);
     return response.data;
   },
 
   // Pobierz protokoły według kategorii
   getByCategory: async (category: string): Promise<ApiResponse<any[]>> => {
-    const response = await api.get<ApiResponse<any[]>>(`/predefined-protocols/category/${category}`);
+    const response = await api.get<ApiResponse<any[]>>(`/protocols/category/${category}`);
     return response.data;
   },
 };
@@ -165,10 +171,157 @@ export const protocolsApi = {
   },
 };
 
+// Users API
+export const usersApi = {
+  getAll: async (): Promise<ApiResponse<any[]>> => {
+    const response = await api.get<ApiResponse<any[]>>('/public/operators');
+    return response.data;
+  },
+};
+
 // Health check
 export const healthApi = {
   check: async (): Promise<{ status: string; timestamp: string; service: string }> => {
     const response = await api.get('/health');
+    return response.data;
+  },
+};
+
+// Study Execution API
+export const studyExecutionApi = {
+  // Główne operacje CRUD
+  create: async (data: CreateStudyExecutionRequest): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.post<ApiResponse<StudyExecution>>('/study-executions', data);
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.get<ApiResponse<StudyExecution>>(`/study-executions/${id}`);
+    return response.data;
+  },
+
+  getAll: async (
+    filters?: StudyExecutionFilters,
+    pagination?: PaginationOptions
+  ): Promise<ApiResponse<StudyExecution[]>> => {
+    const params = new URLSearchParams();
+    
+    if (filters) {
+      if (filters.status) params.append('status', filters.status.join(','));
+      if (filters.operatorId) params.append('operatorId', filters.operatorId);
+      if (filters.studyId) params.append('studyId', filters.studyId);
+      if (filters.category) params.append('category', filters.category);
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom.toISOString());
+      if (filters.dateTo) params.append('dateTo', filters.dateTo.toISOString());
+      if (filters.tags) params.append('tags', filters.tags.join(','));
+      if (filters.search) params.append('search', filters.search);
+    }
+    
+    if (pagination) {
+      params.append('page', pagination.page.toString());
+      params.append('limit', pagination.limit.toString());
+      if (pagination.sortBy) params.append('sortBy', pagination.sortBy);
+      if (pagination.sortOrder) params.append('sortOrder', pagination.sortOrder);
+    }
+
+    const response = await api.get<ApiResponse<StudyExecution[]>>(
+      `/study-executions?${params.toString()}`
+    );
+    return response.data;
+  },
+
+  // Zarządzanie cyklem życia
+  start: async (id: string): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.post<ApiResponse<StudyExecution>>(`/study-executions/${id}/start`);
+    return response.data;
+  },
+
+  pause: async (id: string, notes?: string): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.post<ApiResponse<StudyExecution>>(
+      `/study-executions/${id}/pause`,
+      { notes }
+    );
+    return response.data;
+  },
+
+  resume: async (id: string): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.post<ApiResponse<StudyExecution>>(`/study-executions/${id}/resume`);
+    return response.data;
+  },
+
+  complete: async (
+    id: string,
+    summary?: string,
+    recommendations?: string
+  ): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.post<ApiResponse<StudyExecution>>(
+      `/study-executions/${id}/complete`,
+      { summary, recommendations }
+    );
+    return response.data;
+  },
+
+  // Zarządzanie próbkami
+  startSample: async (sampleId: string, operatorId: string): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>(
+      `/study-executions/samples/${sampleId}/start`,
+      { operatorId }
+    );
+    return response.data;
+  },
+
+  completeSample: async (
+    sampleId: string,
+    quality: 'pass' | 'fail' | 'warning',
+    notes?: string
+  ): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>(
+      `/study-executions/samples/${sampleId}/complete`,
+      { quality, notes }
+    );
+    return response.data;
+  },
+
+  skipSample: async (sampleId: string, reason: string): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>(
+      `/study-executions/samples/${sampleId}/skip`,
+      { reason }
+    );
+    return response.data;
+  },
+
+  // Pomiary
+  addMeasurement: async (data: AddMeasurementRequest): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>('/study-executions/measurements', data);
+    return response.data;
+  },
+
+  // Aktualizacja postępu
+  updateProgress: async (id: string): Promise<ApiResponse<StudyExecution>> => {
+    const response = await api.put<ApiResponse<StudyExecution>>(`/study-executions/${id}/progress`);
+    return response.data;
+  },
+
+  // Eksporty
+  createExport: async (
+    id: string,
+    exportRequest: Omit<CreateExportRequest, 'executionId'>
+  ): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>(
+      `/study-executions/${id}/exports`,
+      { ...exportRequest, executionId: id }
+    );
+    return response.data;
+  },
+
+  getExports: async (id: string): Promise<ApiResponse<any[]>> => {
+    const response = await api.get<ApiResponse<any[]>>(`/study-executions/${id}/exports`);
+    return response.data;
+  },
+
+  // Zapis w systemie EDITH
+  saveToEdith: async (id: string): Promise<ApiResponse<any>> => {
+    const response = await api.post<ApiResponse<any>>(`/study-executions/${id}/save`);
     return response.data;
   },
 };

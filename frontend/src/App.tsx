@@ -11,8 +11,9 @@ import { MainLayout } from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Dashboard } from './pages/Dashboard';
 import ProtocolsList from './pages/ProtocolsList';
-import { StudyList, EditStudy, ExecuteStudy } from './pages/Studies';
+import NewStudyList from './pages/Studies/NewStudyList'; // Nasz nowy komponent
 import { CreateStudy } from './pages/CreateStudy';
+import { ExecuteStudy } from './pages/ExecuteStudy';
 import StudyStatistics from './pages/StudyStatistics';
 import ProtocolCreator from './pages/ProtocolCreator';
 import { Goals } from './pages/Goals';
@@ -99,10 +100,9 @@ const App: React.FC = () => {
                         <Route path="/create-protocol" element={<ProtocolCreator />} />
                         
                         {/* Studies */}
-                        <Route path="/studies" element={<StudyList />} />
+                        <Route path="/studies" element={<NewStudyList />} />
                         <Route path="/studies/create" element={<CreateStudy />} />
                         <Route path="/studies/:id/execute" element={<ExecuteStudy />} />
-                        <Route path="/studies/:id/edit" element={<EditStudy />} />
                         <Route path="/studies/:id/statistics" element={<StudyStatistics />} />
                         
                         {/* 404 */}
